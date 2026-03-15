@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const generateLLMResponse = require("./llmService");
 
 const app = express();
 const PORT = 3000;
@@ -7,32 +8,12 @@ const PORT = 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-let conversations = [
-  {
-    id: 1,
-    title: "Homework Help",
-    prompt: "Help me study calculus.",
-    response: "This is a sample response for homework help.",
-    bookmarked: false
-  },
-  {
-    id: 2,
-    title: "Coding Assistance",
-    prompt: "Help me debug JavaScript.",
-    response: "This is a sample response for coding assistance.",
-    bookmarked: false
-  }
-];
-
-let nextId = 3;
+let conversations = [];
+let nextId = 1;
 
 let settings = {
   responseLength: 200
 };
-
-function generateFakeResponse(prompt) {
-  return `You asked: ${prompt}. This is a prototype LLM response. It is designed to simulate how the system will behave in the final product. The response can be shortened based on the current user setting. For iteration 1, this placeholder response is enough to demonstrate the end-to-end flow of query input, response generation, bookmarking, deleting, and saving user preferences.`;
-}
 
 function shortenResponse(text, maxWords) {
   const words = text.trim().split(/\s+/);
@@ -40,8 +21,52 @@ function shortenResponse(text, maxWords) {
   return words.slice(0, maxWords).join(" ");
 }
 
+function createConversation(prompt, shorten) {
+  let response = generateLLMResponse(prompt);
+
+  if (shorten) {
+    response = shortenResponse(response, settings.responseLength);
+  }
+
+  const conversation = {
+    id: nextId++,
+    title: prompt.length > 20 ? prompt.slice(0, 20) + "..." : prompt,
+    prompt,
+    response,
+    bookmarked: false,
+    createdAt: new Date().toISOString()
+  };
+
+  conversations.push(conversation);
+  return conversation;
+}
+
+function bookmarkConversation(id) {
+  const conversation = conversations.find(c => c.id === id);
+  if (!conversation) return null;
+  conversation.bookmarked = true;
+  return conversation;
+}
+
+function deleteConversationById(id) {
+  const index = conversations.findIndex(c => c.id === id);
+  if (index === -1) return null;
+  return conversations.splice(index, 1)[0];
+}
+
 app.get("/api/conversations", (req, res) => {
   res.json(conversations);
+});
+
+app.get("/api/conversations/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const conversation = conversations.find(c => c.id === id);
+
+  if (!conversation) {
+    return res.status(404).json({ error: "Conversation not found." });
+  }
+
+  res.json(conversation);
 });
 
 app.get("/api/bookmarks", (req, res) => {
@@ -56,33 +81,18 @@ app.post("/api/conversations", (req, res) => {
     return res.status(400).json({ error: "Prompt is required." });
   }
 
-  let response = generateFakeResponse(prompt);
-
-  if (shorten) {
-    response = shortenResponse(response, settings.responseLength);
-  }
-
-  const conversation = {
-    id: nextId++,
-    title: prompt.length > 20 ? prompt.slice(0, 20) + "..." : prompt,
-    prompt,
-    response,
-    bookmarked: false
-  };
-
-  conversations.push(conversation);
+  const conversation = createConversation(prompt.trim(), shorten);
   res.status(201).json(conversation);
 });
 
 app.post("/api/bookmarks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const conversation = conversations.find(c => c.id === id);
+  const conversation = bookmarkConversation(id);
 
   if (!conversation) {
     return res.status(404).json({ error: "Conversation not found." });
   }
 
-  conversation.bookmarked = true;
   res.json({
     message: "Conversation successfully bookmarked",
     conversation
@@ -91,13 +101,12 @@ app.post("/api/bookmarks/:id", (req, res) => {
 
 app.delete("/api/conversations/:id", (req, res) => {
   const id = Number(req.params.id);
-  const index = conversations.findIndex(c => c.id === id);
+  const deleted = deleteConversationById(id);
 
-  if (index === -1) {
+  if (!deleted) {
     return res.status(404).json({ error: "Conversation not found." });
   }
 
-  const deleted = conversations.splice(index, 1)[0];
   res.json({
     message: "Conversation successfully deleted",
     deleted
@@ -107,7 +116,7 @@ app.delete("/api/conversations/:id", (req, res) => {
 app.put("/api/settings/response-length", (req, res) => {
   const { responseLength } = req.body;
 
-  if (!responseLength || responseLength <= 0) {
+  if (!responseLength || Number(responseLength) <= 0) {
     return res.status(400).json({ error: "Invalid response length." });
   }
 
@@ -129,4 +138,10 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, shortenResponse };
+module.exports = {
+  app,
+  shortenResponse,
+  createConversation,
+  bookmarkConversation,
+  deleteConversationById
+};

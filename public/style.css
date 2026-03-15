@@ -1,0 +1,127 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f5f7fb;
+  color: #222;
+}
+
+.container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 280px;
+  background: #ffffff;
+  border-right: 1px solid #dcdcdc;
+  padding: 24px 20px;
+}
+
+.sidebar h2 {
+  font-size: 28px;
+  margin-top: 0;
+  margin-bottom: 18px;
+}
+
+.sidebar ul {
+  list-style: disc;
+  padding-left: 20px;
+  margin-bottom: 40px;
+}
+
+.sidebar li {
+  margin-bottom: 14px;
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.sidebar button {
+  margin-left: 10px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.main {
+  flex: 1;
+  padding: 40px 48px;
+}
+
+.topbar h1 {
+  font-size: 48px;
+  margin: 0 0 28px 0;
+}
+
+.settings {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  font-size: 18px;
+}
+
+.settings input[type="number"] {
+  width: 90px;
+  padding: 6px 8px;
+  font-size: 16px;
+}
+
+.queryBox {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+#promptInput {
+  flex: 1;
+  max-width: 720px;
+  padding: 14px 16px;
+  font-size: 18px;
+  border: 1px solid #cfcfcf;
+  border-radius: 10px;
+  background: white;
+}
+
+button {
+  padding: 10px 16px;
+  font-size: 16px;
+  border: 1px solid #c8c8c8;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #f0f0f0;
+}
+
+.responseCard {
+  max-width: 800px;
+  background: white;
+  border: 1px solid #dcdcdc;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.responseCard h3 {
+  margin-top: 0;
+  margin-bottom: 14px;
+  font-size: 24px;
+}
+
+.responseCard p {
+  font-size: 17px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.responseActions {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+}

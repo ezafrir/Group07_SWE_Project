@@ -6,6 +6,22 @@ const sendBtn = document.getElementById("sendBtn");
 const shortenToggle = document.getElementById("shortenToggle");
 const wordLimit = document.getElementById("wordLimit");
 const saveSettingsBtn = document.getElementById("saveSettingsBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const userInfo = document.getElementById("userInfo");
+
+async function checkAuth() {
+  const res = await fetch("/api/me");
+  const data = await res.json();
+
+  if (!data.loggedIn) {
+    window.location.href = "/";
+    return;
+  }
+
+  if (userInfo) {
+    userInfo.textContent = `Logged in as ${data.user.username}`;
+  }
+}
 
 async function loadConversations() {
   const res = await fetch("/api/conversations");
@@ -165,8 +181,16 @@ async function deleteConversation(id) {
   }
 }
 
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", async () => {
+    await fetch("/api/logout", { method: "POST" });
+    window.location.href = "/";
+  });
+}
+
 saveSettingsBtn.addEventListener("click", saveSettings);
 sendBtn.addEventListener("click", sendPrompt);
 
+checkAuth();
 loadConversations();
 loadBookmarks();

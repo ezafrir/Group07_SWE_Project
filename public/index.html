@@ -18,7 +18,13 @@
 
     <main class="main">
       <div class="topbar">
-        <h1>How can I help you?</h1>
+        <div class="topbarRow">
+          <h1>How can I help you?</h1>
+          <div class="userControls">
+            <span id="userInfo"></span>
+            <button id="logoutBtn">Log Out</button>
+          </div>
+        </div>
       </div>
 
       <div class="settings">
@@ -36,8 +42,8 @@
       </div>
 
       <div class="queryBox">
-      <input type="text" id="promptInput" placeholder="Type your query..." />
-      <button id="sendBtn">Send</button>
+        <input type="text" id="promptInput" placeholder="Type your query..." />
+        <button id="sendBtn">Send</button>
       </div>
 
       <section id="responseSection"></section>

@@ -52,14 +52,14 @@ Group07_SWE_Project
 
 ## How to Run the Project
 1. Clone the repository
-git clone <repo-url>
-2. Navigate into the project folder
-cd Group07_SWE_Project-main
-3. Install dependencies
-npm install
-4. Start the server
-node server.js
-5. Open the application in a browser: http://localhost:3000
+   git clone <repo-url>
+3. Navigate into the project folder
+   cd Group07_SWE_Project-main
+5. Install dependencies
+   npm install
+7. Start the server
+   node server.js
+9. Open the application in a browser: http://localhost:3000
 ## Running Unit Tests
 The project uses Jasmine for unit testing. Run tests using: npx jasmine
 Example output: 13 specs, 0 failures

@@ -324,7 +324,7 @@ function pause(ms) {
 
     const responseEl = await p.$(".responseCard p:nth-child(3)");
     const text = await p.evaluate(el => el.textContent, responseEl);
-    const words = text.replace(/^Response:\s*/i, "").trim().split(/\s+/);
+    const words = text.replace(/^Response:\s*///i, "").trim().split(/\s+/);
     //check(words.length <= 5, `Response capped at 5 words (got ${words.length})`);
 
     //await p.close();

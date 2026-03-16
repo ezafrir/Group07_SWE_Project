@@ -2,6 +2,9 @@ const chatList = document.getElementById("chatList");
 const bookmarkList = document.getElementById("bookmarkList");
 const responseSection = document.getElementById("responseSection");
 const promptInput = document.getElementById("promptInput");
+const searchInput = document.getElementById("searchInput");
+const searchBtn = document.getElementById("searchBtn");
+const clearSearchBtn = document.getElementById("clearSearchBtn");
 const sendBtn = document.getElementById("sendBtn");
 const shortenToggle = document.getElementById("shortenToggle");
 const wordLimit = document.getElementById("wordLimit");
@@ -154,6 +157,22 @@ async function bookmarkConversation(id) {
 
   alert("Conversation successfully bookmarked");
   await loadBookmarks();
+}
+
+//unbookmark conv function
+async function unbookmarkConversation(id) {
+
+  const res = await fetch(`/api/bookmarks/${id}`, {// send a delete request to the backend api
+    method: "DELETE"
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || "Could not remove bookmark");
+    return;
+  }
+  
+  alert("Bookmark removed successfully"); //tell user unbookmark was successful
+  await loadBookmarks(); //reload bookmark update
 }
 
 async function deleteConversation(id) {

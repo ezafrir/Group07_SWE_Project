@@ -243,6 +243,18 @@ if (logoutBtn) {
 saveSettingsBtn.addEventListener("click", saveSettings);
 sendBtn.addEventListener("click", sendPrompt);
 
+if (searchBtn) {
+  searchBtn.addEventListener("click", searchConversations);
+}
+
+if (clearSearchBtn) {
+  clearSearchBtn.addEventListener("click", async () => {
+    searchInput.value = "";
+    responseSection.innerHTML = "";
+    await loadConversations();
+  });
+}
+
 checkAuth();
 loadConversations();
 loadBookmarks();

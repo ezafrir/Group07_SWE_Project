@@ -90,17 +90,6 @@ function requireAuth(req, res, next) {
 //   res.sendFile(path.join(__dirname, "public", "landing.html"));
 // });
 
-//DEBUG FOR ABOVE
-app.get("/", (req, res) => {
-  if (req.session.user) {
-    return res.redirect("/app");
-  }
-
-  const landingPath = path.join(__dirname, "public", "landing.html");
-  console.log("Landing path:", landingPath);
-  res.sendFile(landingPath);
-});
-
 // app.get("/app", (req, res) => {
 //   if (!req.session.user) {
 //     return res.redirect("/");
@@ -109,16 +98,19 @@ app.get("/", (req, res) => {
 // });
 
 //DEBUG FOR ABOVE
+app.get("/", (req, res) => {
+  if (req.session.user) {
+    return res.redirect("/app");
+  }
+  return res.redirect("/landing.html");
+});
+
 app.get("/app", (req, res) => {
   if (!req.session.user) {
     return res.redirect("/");
   }
-
-  const appPath = path.join(__dirname, "public", "index.html");
-  console.log("App path:", appPath);
-  res.sendFile(appPath);
+  return res.redirect("/index.html");
 });
-
 //------------------------------------
 // Static files AFTER custom page routes
 app.use(express.static(path.join(__dirname, "public")));

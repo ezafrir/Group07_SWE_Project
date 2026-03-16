@@ -109,26 +109,35 @@ function pause(ms) {
   }*/
 
 // ── Suite 4: Login ──────────────────────────────────────────────────────────
-  console.log("\n🔑  Suite 4: Login");
-  {
-    const p = await newPage();
-    
-    // SKIP signUp(p, ...) because "puppetuser" already exists from Suite 2!
-    
-    await p.goto(BASE, { waitUntil: "networkidle0" });
-    
-    // Fill out the Log In section using Suite 2's info
-    await p.type("#loginEmail",    "puppet@test.com");
-    await p.type("#loginPassword", "testpass");
-    await p.click("#loginBtn");
-    
-    await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
-
-    check(p.url().includes("index.html"), "Redirected to index.html after login");
-
-    await p.close();
-  }
+console.log("\n🔑  Suite 4: Login");
+{
+  const p = await newPage();
   
+  // 1. Go to the page
+  await p.goto(BASE, { waitUntil: "networkidle0" });
+
+  // 2. FORCE LOGOUT: Clear storage so the Login form actually appears
+  await p.evaluate(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    // If your friend uses cookies, they might still be logged in here.
+  });
+  
+  // 3. Reload to show the logged-out state (the Welcome/Login screen)
+  await p.reload({ waitUntil: "networkidle0" });
+
+  // 4. Wait to make sure the box is actually there before typing
+  await p.waitForSelector("#loginEmail", { visible: true });
+
+  await p.type("#loginEmail",    "puppet@test.com");
+  await p.type("#loginPassword", "testpass");
+  await p.click("#loginBtn");
+  
+  await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
+  check(p.url().includes("index.html"), "Redirected to index.html after login");
+
+  await p.close();
+}
   // ── Suite 5: Invalid Login ──────────────────────────────────────────────────
   console.log("\n🚫  Suite 5: Invalid Login");
   {

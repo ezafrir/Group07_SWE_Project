@@ -206,19 +206,9 @@ Acceptance test (features/bookmarks.feature)
 | Suite | Checks |
 |---|---|
 | 1. Landing Page | h1 text, signup button, login button |
-| 2. Successful Sign Up | Redirect to /app, username shown |
-| 3. Duplicate Email | Correct error message |
-| 4. Login | Redirect to /app |
-| 5. Invalid Login | Correct error message |
-| 6. Logout | On /app before; redirected after |
-| 7. Protected Route | Unauth user redirected from /app |
-| 8. Submit Prompt | Card appears; content relevant |
-| 9. Empty Prompt | No card created |
-| 10. Chat Sidebar | Entry appears after submit |
-| 11. Bookmark | Entry in Bookmarked Chats |
-| 12. Delete Conversation | Item removed from list |
-| 13. Cancel Delete | Item stays in list |
-| 14. Shorten Response | Word count ≤ set limit |
+| 2. Successful Sign Up | Redirect to index.html, username shown |
+| 3. Login | Error message if incorrect credentials or redirect if correct |
+
 
 **Recording tip:** open two terminal windows side by side — one running `node server.js`, one running `node tests/puppeteer/e2e.test.js`. OBS Studio (free) can capture both. The run takes under 60 seconds.
 

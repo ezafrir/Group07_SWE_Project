@@ -1,5 +1,3 @@
-# Group07_SWE_Project
-
 #LLM Web Interface Prototype
 
 ## Project Description

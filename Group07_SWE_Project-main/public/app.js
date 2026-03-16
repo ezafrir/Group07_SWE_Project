@@ -170,7 +170,7 @@ async function unbookmarkConversation(id) {
     alert(data.error || "Could not remove bookmark");
     return;
   }
-  
+
   alert("Bookmark removed successfully"); //tell user unbookmark was successful
   await loadBookmarks(); //reload bookmark update
 }
@@ -199,6 +199,39 @@ async function deleteConversation(id) {
     card.remove();
   }
 }
+
+
+
+//search function
+async function searchConversations() {
+  const query = searchInput.value.trim(); //get text from search and trim whitespace
+  if (!query) {
+    alert("Please enter a search term"); //if user entered nothing, send an alert and do not search
+    return;
+  }
+
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`); //send request to backend search api
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || "Search failed");
+    return;
+  }
+
+  responseSection.innerHTML = ""; //clear prev searches
+
+  if (data.length === 0) { //if no searches found
+    responseSection.innerHTML = "<p>No matching conversations found.</p>";
+    return;
+  }
+//render search results:
+  data
+    .slice()
+    .reverse()
+    .forEach(conversation => {
+      renderConversation(conversation, true);
+    });
+}
+
 
 if (logoutBtn) {
   logoutBtn.addEventListener("click", async () => {

@@ -1,5 +1,6 @@
-const express = require("express");
 const path = require("path");
+const express = require("express");
+
 const session = require("express-session");
 const generateLLMResponse = require("./llmService");
 
@@ -81,20 +82,44 @@ function requireAuth(req, res, next) {
 }
 
 // Page routes
+
+// app.get("/", (req, res) => {
+//   if (req.session.user) {
+//     return res.redirect("/app");
+//   }
+//   res.sendFile(path.join(__dirname, "public", "landing.html"));
+// });
+
+//DEBUG FOR ABOVE
 app.get("/", (req, res) => {
   if (req.session.user) {
     return res.redirect("/app");
   }
-  res.sendFile(path.join(__dirname, "public", "landing.html"));
+
+  const landingPath = path.join(__dirname, "public", "landing.html");
+  console.log("Landing path:", landingPath);
+  res.sendFile(landingPath);
 });
 
+// app.get("/app", (req, res) => {
+//   if (!req.session.user) {
+//     return res.redirect("/");
+//   }
+//   res.sendFile(path.join(__dirname, "public", "index.html"));
+// });
+
+//DEBUG FOR ABOVE
 app.get("/app", (req, res) => {
   if (!req.session.user) {
     return res.redirect("/");
   }
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+
+  const appPath = path.join(__dirname, "public", "index.html");
+  console.log("App path:", appPath);
+  res.sendFile(appPath);
 });
 
+//------------------------------------
 // Static files AFTER custom page routes
 app.use(express.static(path.join(__dirname, "public")));
 

@@ -44,6 +44,8 @@ function pause(ms) {
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
   });
 
+  let p;
+
   async function newPage() {
     const p = await browser.newPage();
     await p.setViewport({ width: 1280, height: 800 });

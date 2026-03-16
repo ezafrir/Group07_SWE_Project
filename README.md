@@ -32,32 +32,14 @@ Other Tools
 - GitHub
 - Git
 
-## Project Structure
-Group07_SWE_Project
-│
-├── server.js            # Express backend server
-├── llmService.js        # Simulated LLM response generator
-│
-├── public               # Frontend files
-│   ├── index.html
-│   ├── landing.html
-│   ├── app.js
-│   ├── landing.js
-│   └── style.css
-│
-├── spec                 # Jasmine unit tests
-│   └── appSpec.js
-│
-└── README.md
-
 ## How to Run the Project
-1. Clone the repository
+1. Clone the repository:
    git clone <repo-url>
-3. Navigate into the project folder
+3. Navigate into the project folder:
    cd Group07_SWE_Project-main
-5. Install dependencies
+5. Install dependencies:
    npm install
-7. Start the server
+7. Start the server:
    node server.js
 9. Open the application in a browser: http://localhost:3000
 ## Running Unit Tests

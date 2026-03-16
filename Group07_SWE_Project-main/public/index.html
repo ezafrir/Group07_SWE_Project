@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Prototype</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <h2>Chats</h2>
+      <ul id="chatList"></ul>
+
+      <h2>Bookmarked Chats</h2>
+      <ul id="bookmarkList"></ul>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="topbarRow">
+          <h1>How can I help you?</h1>
+          <div class="userControls">
+            <span id="userInfo"></span>
+            <button id="logoutBtn">Log Out</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings">
+        <label>
+          <input type="checkbox" id="shortenToggle" />
+          Shorten response
+        </label>
+
+        <label>
+          Max words:
+          <input type="number" id="wordLimit" value="200" min="1" />
+        </label>
+
+        <button id="saveSettingsBtn">Save Settings</button>
+      </div>
+
+      <div class="queryBox">
+        <input type="text" id="promptInput" placeholder="Type your query..." />
+        <button id="sendBtn">Send</button>
+      </div>
+
+      <section id="responseSection"></section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

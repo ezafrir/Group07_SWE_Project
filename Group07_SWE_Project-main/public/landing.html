@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Web Interface</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="landingWrapper">
+    <div class="landingHero">
+      <div class="landingLeft">
+        <p class="miniTag">Software Engineering Project</p>
+        <h1>LLM Web Interface</h1>
+        <p class="heroText">
+          Ask questions, save important chats, revisit previous responses,
+          and customize output length in one clean interface.
+        </p>
+      </div>
+
+      <div class="landingCard">
+        <h2>Welcome</h2>
+        <p class="authSubtext">Create an account or log in to continue.</p>
+
+        <div class="authSection">
+          <h3>Create Account</h3>
+          <input type="text" id="signupUsername" placeholder="Username" />
+          <input type="email" id="signupEmail" placeholder="Email" />
+          <input type="password" id="signupPassword" placeholder="Password" />
+          <button id="signupBtn">Sign Up</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="authSection">
+          <h3>Log In</h3>
+          <input type="email" id="loginEmail" placeholder="Email" />
+          <input type="password" id="loginPassword" placeholder="Password" />
+          <button id="loginBtn">Log In</button>
+        </div>
+
+        <p id="authMessage" class="authMessage"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="landing.js"></script>
+</body>
+</html>

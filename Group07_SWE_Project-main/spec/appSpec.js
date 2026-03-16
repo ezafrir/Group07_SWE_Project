@@ -112,4 +112,29 @@ it("does not shorten when shorten is false", () => {// test that responses are n
   expect(conversation.response).toBeDefined();  // verify a response was generated
   expect(conversation.response.length).toBeGreaterThan(0);  // verify the response has content
 });
+
+
+
+
+
+
+
+//newer tests for unbookmarking:
+
+it("removes a bookmark from an existing conversation", () => {
+  const conversation = createConversation(
+    "saved conversation",
+    false,
+    TEST_USER_ID
+  );
+  bookmarkConversation(conversation.id, TEST_USER_ID); //bookmark the convo
+  const result = unbookmarkConversation(conversation.id, TEST_USER_ID); //remove the bookmarj
+  expect(result).toBeDefined(); //check if correct obj was returned
+  expect(result.bookmarked).toBeFalse(); //check if bookmark was removed
+});
+
+it("returns null when unbookmarking a nonexistent conversation", () => { //check that unbookmarking a conversation that doesn't exist returns null
+  const result = unbookmarkConversation(999999, TEST_USER_ID);
+  expect(result).toBeNull(); //should return null since the conversation doesn't exist
+});
 });

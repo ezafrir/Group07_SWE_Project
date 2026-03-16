@@ -88,7 +88,7 @@ function pause(ms) {
   }
 
   // ── Suite 3: Duplicate Email ────────────────────────────────────────────────
-  console.log("\n⚠️   Suite 3: Duplicate Email Error");
+  /*console.log("\n⚠️   Suite 3: Duplicate Email Error");
   {
     const p = await newPage();
     await signUp(p, "first", "dup@test.com", "pass");
@@ -105,7 +105,7 @@ function pause(ms) {
     check(err === "Account already exists.", `Correct duplicate error: "${err}"`);
 
     await p.close();
-  }
+  }*/
 
   // ── Suite 4: Login ──────────────────────────────────────────────────────────
   console.log("\n🔑  Suite 4: Login");

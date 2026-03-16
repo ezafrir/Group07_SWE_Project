@@ -2,6 +2,9 @@ const chatList = document.getElementById("chatList");
 const bookmarkList = document.getElementById("bookmarkList");
 const responseSection = document.getElementById("responseSection");
 const promptInput = document.getElementById("promptInput");
+const searchInput = document.getElementById("searchInput");
+const searchBtn = document.getElementById("searchBtn");
+const clearSearchBtn = document.getElementById("clearSearchBtn");
 const sendBtn = document.getElementById("sendBtn");
 const shortenToggle = document.getElementById("shortenToggle");
 const wordLimit = document.getElementById("wordLimit");
@@ -117,6 +120,7 @@ function renderConversation(conversation, prepend = false) {
       <p><strong>Response:</strong> ${conversation.response}</p>
       <div class="responseActions">
         <button onclick="bookmarkConversation(${conversation.id})">Bookmark</button>
+         <button onclick="unbookmarkConversation(${conversation.id})">Unbookmark</button>
       </div>
     </div>
   `;
@@ -156,6 +160,22 @@ async function bookmarkConversation(id) {
   await loadBookmarks();
 }
 
+//unbookmark conv function
+async function unbookmarkConversation(id) {
+
+  const res = await fetch(`/api/bookmarks/${id}`, {// send a delete request to the backend api
+    method: "DELETE"
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || "Could not remove bookmark");
+    return;
+  }
+
+  alert("Bookmark removed successfully"); //tell user unbookmark was successful
+  await loadBookmarks(); //reload bookmark update
+}
+
 async function deleteConversation(id) {
   const confirmed = confirm("Are you sure you want to delete this conversation?");
   if (!confirmed) return;
@@ -181,6 +201,39 @@ async function deleteConversation(id) {
   }
 }
 
+
+
+//search function
+async function searchConversations() {
+  const query = searchInput.value.trim(); //get text from search and trim whitespace
+  if (!query) {
+    alert("Please enter a search term"); //if user entered nothing, send an alert and do not search
+    return;
+  }
+
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`); //send request to backend search api
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || "Search failed");
+    return;
+  }
+
+  responseSection.innerHTML = ""; //clear prev searches
+
+  if (data.length === 0) { //if no searches found
+    responseSection.innerHTML = "<p>No matching conversations found.</p>";
+    return;
+  }
+//render search results:
+  data
+    .slice()
+    .reverse()
+    .forEach(conversation => {
+      renderConversation(conversation, true);
+    });
+}
+
+
 if (logoutBtn) {
   logoutBtn.addEventListener("click", async () => {
     await fetch("/api/logout", { method: "POST" });
@@ -190,6 +243,18 @@ if (logoutBtn) {
 
 saveSettingsBtn.addEventListener("click", saveSettings);
 sendBtn.addEventListener("click", sendPrompt);
+
+if (searchBtn) {
+  searchBtn.addEventListener("click", searchConversations);
+}
+
+if (clearSearchBtn) {
+  clearSearchBtn.addEventListener("click", async () => {
+    searchInput.value = "";
+    responseSection.innerHTML = "";
+    await loadConversations();
+  });
+}
 
 checkAuth();
 loadConversations();

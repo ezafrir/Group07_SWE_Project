@@ -352,5 +352,6 @@ module.exports = {
   shortenResponse,
   createConversation,
   bookmarkConversation,
+  unbookmarkConversation,
   deleteConversationById
 };

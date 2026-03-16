@@ -120,6 +120,7 @@ function renderConversation(conversation, prepend = false) {
       <p><strong>Response:</strong> ${conversation.response}</p>
       <div class="responseActions">
         <button onclick="bookmarkConversation(${conversation.id})">Bookmark</button>
+         <button onclick="unbookmarkConversation(${conversation.id})">Unbookmark</button>
       </div>
     </div>
   `;

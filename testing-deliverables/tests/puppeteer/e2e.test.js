@@ -81,7 +81,7 @@ function pause(ms) {
     const p = await newPage();
     await signUp(p, "puppetuser", "puppet@test.com", "testpass");
 
-    check(p.url().includes("/app"), "Redirected to /app after signup");
+    check(p.url().includes("index.html"), "Redirected to index.html after signup");
     const info = await p.$eval("#userInfo", el => el.textContent.trim());
     check(info.includes("puppetuser"), `Username shown in header: "${info}"`);
 
@@ -121,7 +121,7 @@ function pause(ms) {
     await p.click("#loginBtn");
     await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
 
-    check(p.url().includes("/app"), "Redirected to /app after login");
+    check(p.url().includes("index.html"), "Redirected to index.html after login");
 
     await p.close();
   }
@@ -147,8 +147,7 @@ function pause(ms) {
   {
     const p = await newPage();
     await signUp(p, "logoutuser", "logout@test.com", "pass");
-    check(p.url().includes("/app"), "On /app before logout");
-
+    check(p.url().includes("index.html"), "On index.html before logout");
     await p.click("#logoutBtn");
     await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
     check(!p.url().includes("/app"), "Redirected away from /app after logout");

@@ -23,7 +23,11 @@ describe("shortenResponse", () => {
 
 describe("conversation features", () => {
   it("creates a new conversation object", () => {
-    const conversation = createConversation("help me study for calc", false);
+    const conversation = createConversation(
+      "help me study for calc",
+      false,
+      TEST_USER_ID
+    );
 
     expect(conversation).toBeDefined();
     expect(conversation.prompt).toBe("help me study for calc");
@@ -31,44 +35,54 @@ describe("conversation features", () => {
     expect(conversation.bookmarked).toBeFalse();
     expect(conversation.id).toBeDefined();
     expect(conversation.createdAt).toBeDefined();
-
-
   });
 
   it("creates a shortened conversation response when shorten is true", () => {
-    const conversation = createConversation("help me study for my exam", true);
+    const conversation = createConversation(
+      "help me study for my exam",
+      true,
+      TEST_USER_ID
+    );
 
     expect(conversation).toBeDefined();
     expect(conversation.response.split(/\s+/).length).toBeLessThanOrEqual(200);
   });
 
   it("bookmarks an existing conversation", () => {
-    const conversation = createConversation("debug my javascript code", false);
-    const result = bookmarkConversation(conversation.id);
+    const conversation = createConversation(
+      "debug my javascript code",
+      false,
+      TEST_USER_ID
+    );
+    const result = bookmarkConversation(conversation.id, TEST_USER_ID);
 
     expect(result).toBeDefined();
     expect(result.bookmarked).toBeTrue();
   });
 
   it("returns null when bookmarking a nonexistent conversation", () => {
-    const result = bookmarkConversation(999999);
+    const result = bookmarkConversation(999999, TEST_USER_ID);
     expect(result).toBeNull();
   });
 
   it("deletes an existing conversation", () => {
-    const conversation = createConversation("recommend a movie", false);
-    const deleted = deleteConversationById(conversation.id);
+    const conversation = createConversation(
+      "recommend a movie",
+      false,
+      TEST_USER_ID
+    );
+    const deleted = deleteConversationById(conversation.id, TEST_USER_ID);
 
     expect(deleted).toBeDefined();
     expect(deleted.id).toBe(conversation.id);
   });
 
   it("returns null when deleting a nonexistent conversation", () => {
-    const result = deleteConversationById(999999);
+    const result = deleteConversationById(999999, TEST_USER_ID);
     expect(result).toBeNull();
   });
 
-
+  //newer tests with userid: 
 
 it("stores the correct userId on a new conversation", () => { // test that the correct userId is stored in a new conversation
   const conversation = createConversation("hello world", false, TEST_USER_ID);  // create a new conversation with a test user ID

@@ -108,17 +108,31 @@ function pause(ms) {
     await p.close();
   }*/
 
-  // ── Suite 4: Login ──────────────────────────────────────────────────────────
+// ── Suite 4: Login ──────────────────────────────────────────────────────────
   console.log("\n🔑  Suite 4: Login");
   {
     const p = await newPage();
+    // 1. Create the user
     await signUp(p, "loginuser", "login@test.com", "mypass");
-    await p.evaluate(async () => await fetch("/api/logout", { method: "POST" }));
-
+    
+    // 2. Log them out so we can test the Login form
+    // Instead of just a fetch, let's actually click a logout button if you have one, 
+    // or force a redirect to a clean BASE URL.
     await p.goto(BASE, { waitUntil: "networkidle0" });
+    await p.evaluate(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+    });
+
+    // 3. Go back to Landing and wait for the Login box to be visible
+    await p.goto(BASE, { waitUntil: "networkidle0" });
+    await p.waitForSelector("#loginEmail", { visible: true });
+
+    // 4. Perform the Login
     await p.type("#loginEmail",    "login@test.com");
     await p.type("#loginPassword", "mypass");
     await p.click("#loginBtn");
+    
     await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
 
     check(p.url().includes("index.html"), "Redirected to index.html after login");

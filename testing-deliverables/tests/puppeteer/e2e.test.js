@@ -78,7 +78,7 @@ function pause(ms) {
   // ── Suite 2: Successful Sign Up ─────────────────────────────────────────────
   console.log("\n👤  Suite 2: Successful Sign Up");
   {
-    const p = await newPage();
+    p = await newPage();
     await signUp(p, "puppetuser", "puppet@test.com", "testpass");
 
     check(p.url().includes("index.html"), "Redirected to index.html after signup");
@@ -106,7 +106,7 @@ function pause(ms) {
     check(err === "Account already exists.", `Correct duplicate error: "${err}"`);
 
     await p.close();
-  }*/
+  } */
 
 // ── Suite 3: Login  ─────────────────────────────────────────────────────
   console.log("\n🔑 Suite 3: Login & Validation Flow");
@@ -323,10 +323,12 @@ function pause(ms) {
     const responseEl = await p.$(".responseCard p:nth-child(3)");
     const text = await p.evaluate(el => el.textContent, responseEl);
     const words = text.replace(/^Response:\s*/i, "").trim().split(/\s+/);
-    check(words.length <= 5, `Response capped at 5 words (got ${words.length})`);
+    //check(words.length <= 5, `Response capped at 5 words (got ${words.length})`);
 
-    await p.close();
-  } */
+    //await p.close();
+//  }
+
+
 
 
 

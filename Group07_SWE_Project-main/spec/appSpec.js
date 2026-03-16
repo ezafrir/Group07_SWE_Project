@@ -2,6 +2,7 @@ const {
   shortenResponse,
   createConversation,
   bookmarkConversation,
+  unbookmarkConversation,
   deleteConversationById
 } = require("../server");
 

@@ -40,7 +40,7 @@ function pause(ms) {
 
 (async () => {
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: false,
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
   });
 
@@ -53,6 +53,7 @@ function pause(ms) {
   // Helper: sign up and land on /app
   async function signUp(p, username, email, password) {
     await p.goto(BASE, { waitUntil: "networkidle0" });
+    await p.waitForSelector("#signupUsername", { visible: true });
     await p.type("#signupUsername", username);
     await p.type("#signupEmail", email);
     await p.type("#signupPassword", password);

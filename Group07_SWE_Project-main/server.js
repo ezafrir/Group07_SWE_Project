@@ -1,0 +1,284 @@
+const express = require("express");
+const path = require("path");
+const session = require("express-session");
+const generateLLMResponse = require("./llmService");
+
+const app = express();
+const PORT = 3000;
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(
+  session({
+    secret: "swe-project-secret",
+    resave: false,
+    saveUninitialized: false
+  })
+);
+
+// In-memory data 
+let conversations = [];
+let nextId = 1;
+
+let users = [];
+let nextUserId = 1;
+
+let settings = {
+  responseLength: 200
+};
+
+// Helper functions 
+function shortenResponse(text, maxWords) {
+  const words = text.trim().split(/\s+/);
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(" ");
+}
+
+function createConversation(prompt, shorten, userId) {
+  let response = generateLLMResponse(prompt);
+
+  if (shorten) {
+    response = shortenResponse(response, settings.responseLength);
+  }
+
+  const conversation = {
+    id: nextId++,
+    userId,
+    title: prompt.length > 20 ? prompt.slice(0, 20) + "..." : prompt,
+    prompt,
+    response,
+    bookmarked: false,
+    createdAt: new Date().toISOString()
+  };
+
+  conversations.push(conversation);
+  return conversation;
+}
+
+function bookmarkConversation(id, userId) {
+  const conversation = conversations.find(
+    c => c.id === id && c.userId === userId
+  );
+  if (!conversation) return null;
+  conversation.bookmarked = true;
+  return conversation;
+}
+
+function deleteConversationById(id, userId) {
+  const index = conversations.findIndex(
+    c => c.id === id && c.userId === userId
+  );
+  if (index === -1) return null;
+  return conversations.splice(index, 1)[0];
+}
+
+function requireAuth(req, res, next) {
+  if (!req.session.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+}
+
+// Page routes
+app.get("/", (req, res) => {
+  if (req.session.user) {
+    return res.redirect("/app");
+  }
+  res.sendFile(path.join(__dirname, "public", "landing.html"));
+});
+
+app.get("/app", (req, res) => {
+  if (!req.session.user) {
+    return res.redirect("/");
+  }
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// Static files AFTER custom page routes
+app.use(express.static(path.join(__dirname, "public")));
+
+// Auth routes 
+app.get("/api/me", (req, res) => {
+  if (!req.session.user) {
+    return res.json({ loggedIn: false });
+  }
+
+  res.json({
+    loggedIn: true,
+    user: req.session.user
+  });
+});
+
+app.post("/api/signup", (req, res) => {
+  const { username, email, password } = req.body;
+
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: "All fields are required." });
+  }
+
+  const existingUser = users.find(u => u.email === email);
+  if (existingUser) {
+    return res.status(400).json({ error: "Account already exists." });
+  }
+
+  const newUser = {
+    id: nextUserId++,
+    username,
+    email,
+    password
+  };
+
+  users.push(newUser);
+
+  req.session.user = {
+    id: newUser.id,
+    username: newUser.username,
+    email: newUser.email
+  };
+
+  res.json({
+    message: "Account created successfully",
+    user: req.session.user
+  });
+});
+
+app.post("/api/login", (req, res) => {
+  const { email, password } = req.body;
+
+  const user = users.find(
+    u => u.email === email && u.password === password
+  );
+
+  if (!user) {
+    return res.status(401).json({ error: "Invalid email or password." });
+  }
+
+  req.session.user = {
+    id: user.id,
+    username: user.username,
+    email: user.email
+  };
+
+  res.json({
+    message: "Login successful",
+    user: req.session.user
+  });
+});
+
+app.post("/api/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.json({ message: "Logged out successfully" });
+  });
+});
+
+// Conversation routes 
+app.get("/api/conversations", requireAuth, (req, res) => {
+  const userConversations = conversations.filter(
+    c => c.userId === req.session.user.id
+  );
+  res.json(userConversations);
+});
+
+app.get("/api/conversations/:id", requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+
+  const conversation = conversations.find(
+    c => c.id === id && c.userId === req.session.user.id
+  );
+
+  if (!conversation) {
+    return res.status(404).json({ error: "Conversation not found." });
+  }
+
+  res.json(conversation);
+});
+
+app.post("/api/conversations", requireAuth, (req, res) => {
+  const { prompt, shorten } = req.body;
+
+  if (!prompt || !prompt.trim()) {
+    return res.status(400).json({ error: "Prompt is required." });
+  }
+
+  const conversation = createConversation(
+    prompt.trim(),
+    shorten,
+    req.session.user.id
+  );
+
+  res.status(201).json(conversation);
+});
+
+app.delete("/api/conversations/:id", requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+
+  const deleted = deleteConversationById(id, req.session.user.id);
+
+  if (!deleted) {
+    return res.status(404).json({ error: "Conversation not found." });
+  }
+
+  res.json({
+    message: "Conversation successfully deleted",
+    deleted
+  });
+});
+
+// Bookmark routes 
+app.get("/api/bookmarks", requireAuth, (req, res) => {
+  const bookmarked = conversations.filter(
+    c => c.userId === req.session.user.id && c.bookmarked
+  );
+  res.json(bookmarked);
+});
+
+app.post("/api/bookmarks/:id", requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+
+  const conversation = bookmarkConversation(id, req.session.user.id);
+
+  if (!conversation) {
+    return res.status(404).json({ error: "Conversation not found." });
+  }
+
+  res.json({
+    message: "Conversation successfully bookmarked",
+    conversation
+  });
+});
+
+// Settings routes 
+app.get("/api/settings", requireAuth, (req, res) => {
+  res.json(settings);
+});
+
+app.put("/api/settings/response-length", requireAuth, (req, res) => {
+  const { responseLength } = req.body;
+
+  if (!responseLength || Number(responseLength) <= 0) {
+    return res.status(400).json({ error: "Invalid response length." });
+  }
+
+  settings.responseLength = Number(responseLength);
+
+  res.json({
+    message: "Response length updated",
+    settings
+  });
+});
+
+// Start server 
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = {
+  app,
+  shortenResponse,
+  createConversation,
+  bookmarkConversation,
+  deleteConversationById
+};

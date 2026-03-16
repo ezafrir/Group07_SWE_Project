@@ -66,6 +66,19 @@ function bookmarkConversation(id, userId) {
   return conversation;
 }
 
+// Function to remove a bookmark from a conversation
+function unbookmarkConversation(id, userId) {
+  //find the conversation with the matching id AND userId so users can only modify their own conversations
+  const conversation = conversations.find(
+    c => c.id === id && c.userId === userId
+  );
+  if (!conversation) return null;// if no conversation was found, return null so we know the conv failed
+  conversation.bookmarked = false; // Set bookmarked to false to remove the bookmark
+
+
+  return conversation;
+}
+
 function deleteConversationById(id, userId) {
   const index = conversations.findIndex(
     c => c.id === id && c.userId === userId
@@ -242,6 +255,29 @@ app.delete("/api/conversations/:id", requireAuth, (req, res) => {
   });
 });
 
+
+
+app.get("/api/search", requireAuth, (req, res) => { //api route that searches conversations by keyword
+  const query = (req.query.q || "").trim().toLowerCase();
+  if (!query) { //if no query, return an error
+    return res.status(400).json({ error: "Search query required." });
+  }
+  // Filter conversations that belong to the logged-in uservAND contain the search query in title, prompt, or response
+  const results = conversations.filter(
+    c =>
+      c.userId === req.session.user.id &&
+      (
+        c.title.toLowerCase().includes(query) ||// chheck if the convos title contains the query
+        c.prompt.toLowerCase().includes(query) ||// Check if the prompt contains the query
+        c.response.toLowerCase().includes(query)// Check if the response contains the query
+      )
+  );
+  res.json(results); // return filtered convos as json
+});
+
+
+
+
 // Bookmark routes 
 app.get("/api/bookmarks", requireAuth, (req, res) => {
   const bookmarked = conversations.filter(
@@ -264,6 +300,25 @@ app.post("/api/bookmarks/:id", requireAuth, (req, res) => {
     conversation
   });
 });
+
+
+app.delete("/api/bookmarks/:id", requireAuth, (req, res) => {// api route to remove a bookmark from a conversation
+  const id = Number(req.params.id);//id from the URL into a number
+  const conversation = unbookmarkConversation(id, req.session.user.id);// Call the helper function to remove the bookmark
+  if (!conversation) {//if conmvo was not found, return a 404 error
+    return res.status(404).json({ error: "Conversation not found." });
+  }
+
+  res.json({
+    message: "Bookmark removed successfully",
+    conversation
+  });
+});
+
+
+
+
+
 
 // Settings routes 
 app.get("/api/settings", requireAuth, (req, res) => {

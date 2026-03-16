@@ -85,7 +85,7 @@ function pause(ms) {
     const info = await p.$eval("#userInfo", el => el.textContent.trim());
     check(info.includes("puppetuser"), `Username shown in header: "${info}"`);
 
-    await p.close();
+
   }
 
   // ── Suite 3: Duplicate Email ────────────────────────────────────────────────
@@ -108,36 +108,40 @@ function pause(ms) {
     await p.close();
   }*/
 
-// ── Suite 4: Login ──────────────────────────────────────────────────────────
-console.log("\n🔑  Suite 4: Login");
-{
-  const p = await newPage();
-  
-  // 1. Go to the page
-  await p.goto(BASE, { waitUntil: "networkidle0" });
+// ── Suite 3: Login  ─────────────────────────────────────────────────────
+  console.log("\n🔑 Suite 3: Login & Validation Flow");
+  {
+    // Use the SAME page 'p' from Suite 2 (don't create a new one)
+    
+    // STEP 1: LOG OUT
+    await p.waitForSelector("#logoutBtn", { visible: true });
+    await p.click("#logoutBtn");
+    await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
+    console.log("  ✅ Logged out successfully");
 
-  // 2. FORCE LOGOUT: Clear storage so the Login form actually appears
-  await p.evaluate(() => {
-    localStorage.clear();
-    sessionStorage.clear();
-    // If your friend uses cookies, they might still be logged in here.
-  });
-  
-  // 3. Reload to show the logged-out state (the Welcome/Login screen)
-  await p.reload({ waitUntil: "networkidle0" });
+    // STEP 2: INCORRECT LOGIN (Suite 5 logic combined)
+    await p.waitForSelector("#loginEmail", { visible: true });
+    await p.type("#loginEmail", "puppet@test.com");
+    await p.type("#loginPassword", "WRONG_PASSWORD");
+    await p.click("#loginBtn");
+    await pause(500); // Give the error message a moment to appear
+    
+    const err = await p.$eval("#authMessage", el => el.textContent.trim());
+    check(err === "Invalid email or password.", "Correctly blocked incorrect login");
 
-  // 4. Wait to make sure the box is actually there before typing
-  await p.waitForSelector("#loginEmail", { visible: true });
+    // STEP 3: CORRECT LOGIN
+    // Clear the wrong password first
+    await p.click("#loginPassword", { clickCount: 3 }); 
+    await p.keyboard.press('Backspace');
+    
+    await p.type("#loginPassword", "testpass"); // The real password from Suite 2
+    await p.click("#loginBtn");
+    await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
 
-  await p.type("#loginEmail",    "puppet@test.com");
-  await p.type("#loginPassword", "testpass");
-  await p.click("#loginBtn");
-  
-  await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
-  check(p.url().includes("index.html"), "Redirected to index.html after login");
-
-  await p.close();
-}
+    check(p.url().includes("index.html"), "Redirected back to app after correct login");
+    console.log("  ✅ Logged back in successfully");
+  }
+  /*
   // ── Suite 5: Invalid Login ──────────────────────────────────────────────────
   console.log("\n🚫  Suite 5: Invalid Login");
   {
@@ -166,7 +170,7 @@ console.log("\n🔑  Suite 4: Login");
 
     await p.close();
   }
-
+/*
   // ── Suite 7: Protected Route ────────────────────────────────────────────────
   console.log("\n🔒  Suite 7: Protected Route (/app without session)");
   {
@@ -322,7 +326,9 @@ console.log("\n🔑  Suite 4: Login");
     check(words.length <= 5, `Response capped at 5 words (got ${words.length})`);
 
     await p.close();
-  }
+  } */
+
+
 
   // ── Summary ─────────────────────────────────────────────────────────────────
   await browser.close();

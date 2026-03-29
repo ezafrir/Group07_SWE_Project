@@ -46,14 +46,41 @@ function createConversation(prompt, shorten, userId) {
   const conversation = {
     id: nextId++,
     userId,
-    title: prompt.length > 20 ? prompt.slice(0, 20) + "..." : prompt,
+    title: prompt.length > 30 ? prompt.slice(0, 30) + "..." : prompt,
     prompt,
     response,
+    messages: [
+      { role: "user", content: prompt },
+      { role: "assistant", content: response }
+    ],
     bookmarked: false,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
 
   conversations.push(conversation);
+  return conversation;
+}
+
+function addMessageToConversation(id, prompt, shorten, userId) {
+  const conversation = conversations.find(
+    c => c.id === id && c.userId === userId
+  );
+  if (!conversation) return null;
+
+  let response = generateLLMResponse(prompt);
+  if (shorten) {
+    response = shortenResponse(response, settings.responseLength);
+  }
+
+  conversation.messages.push({ role: "user", content: prompt });
+  conversation.messages.push({ role: "assistant", content: response });
+  conversation.updatedAt = new Date().toISOString();
+
+  // Keep legacy fields updated with the latest exchange
+  conversation.prompt = prompt;
+  conversation.response = response;
+
   return conversation;
 }
 
@@ -240,6 +267,28 @@ app.post("/api/conversations", requireAuth, (req, res) => {
   res.status(201).json(conversation);
 });
 
+app.post("/api/conversations/:id/messages", requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const { prompt, shorten } = req.body;
+
+  if (!prompt || !prompt.trim()) {
+    return res.status(400).json({ error: "Prompt is required." });
+  }
+
+  const conversation = addMessageToConversation(
+    id,
+    prompt.trim(),
+    shorten,
+    req.session.user.id
+  );
+
+  if (!conversation) {
+    return res.status(404).json({ error: "Conversation not found." });
+  }
+
+  res.json(conversation);
+});
+
 app.delete("/api/conversations/:id", requireAuth, (req, res) => {
   const id = Number(req.params.id);
 
@@ -351,6 +400,7 @@ module.exports = {
   app,
   shortenResponse,
   createConversation,
+  addMessageToConversation,
   bookmarkConversation,
   unbookmarkConversation,
   deleteConversationById

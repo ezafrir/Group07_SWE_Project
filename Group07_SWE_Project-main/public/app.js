@@ -1,28 +1,34 @@
 // ─── DOM refs ────────────────────────────────────────────────────────────────
-const chatList         = document.getElementById("chatList");
-const bookmarkList     = document.getElementById("bookmarkList");
-const responseSection  = document.getElementById("responseSection");
-const threadSection    = document.getElementById("threadSection");
-const threadTitle      = document.getElementById("threadTitle");
-const threadMessages   = document.getElementById("threadMessages");
+const chatList            = document.getElementById("chatList");
+const bookmarkList        = document.getElementById("bookmarkList");
+const responseSection     = document.getElementById("responseSection");
+const threadSection       = document.getElementById("threadSection");
+const threadTitle         = document.getElementById("threadTitle");
+const threadMessages      = document.getElementById("threadMessages");
 const threadBookmarkBtn   = document.getElementById("threadBookmarkBtn");
 const threadUnbookmarkBtn = document.getElementById("threadUnbookmarkBtn");
-const threadDeleteBtn  = document.getElementById("threadDeleteBtn");
-const promptInput      = document.getElementById("promptInput");
+const threadDeleteBtn     = document.getElementById("threadDeleteBtn");
+const promptInput         = document.getElementById("promptInput");
+const sendBtn             = document.getElementById("sendBtn");
+const shortenToggle       = document.getElementById("shortenToggle");
+const wordLimit           = document.getElementById("wordLimit");
+const saveSettingsBtn     = document.getElementById("saveSettingsBtn");
+const logoutBtn           = document.getElementById("logoutBtn");
+const userInfo            = document.getElementById("userInfo");
+const newChatBtn          = document.getElementById("newChatBtn");
+const mainHeading         = document.getElementById("mainHeading");
+
+// Search modal refs (Change #4)
+const openSearchBtn    = document.getElementById("openSearchBtn");
+const searchOverlay    = document.getElementById("searchOverlay");
+const closeSearchBtn   = document.getElementById("closeSearchBtn");
 const searchInput      = document.getElementById("searchInput");
 const searchBtn        = document.getElementById("searchBtn");
 const clearSearchBtn   = document.getElementById("clearSearchBtn");
-const sendBtn          = document.getElementById("sendBtn");
-const shortenToggle    = document.getElementById("shortenToggle");
-const wordLimit        = document.getElementById("wordLimit");
-const saveSettingsBtn  = document.getElementById("saveSettingsBtn");
-const logoutBtn        = document.getElementById("logoutBtn");
-const userInfo         = document.getElementById("userInfo");
-const newChatBtn       = document.getElementById("newChatBtn");
-const mainHeading      = document.getElementById("mainHeading");
+const searchResults    = document.getElementById("searchResults");
 
 // ─── State ───────────────────────────────────────────────────────────────────
-let activeConversationId = null; // UC3: track which conversation is open
+let activeConversationId = null;
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 async function checkAuth() {
@@ -32,14 +38,11 @@ async function checkAuth() {
   if (userInfo) userInfo.textContent = `Logged in as ${data.user.username}`;
 }
 
-// ─── Sidebar: load conversations (UC2) ───────────────────────────────────────
+// ─── Sidebar: load conversations ─────────────────────────────────────────────
 async function loadConversations() {
   const res           = await fetch("/api/conversations");
   const conversations = await res.json();
-
-  chatList.innerHTML = "";
-
-  // Most-recent first
+  chatList.innerHTML  = "";
   conversations
     .slice()
     .reverse()
@@ -60,9 +63,7 @@ async function loadConversations() {
 async function loadBookmarks() {
   const res       = await fetch("/api/bookmarks");
   const bookmarks = await res.json();
-
   bookmarkList.innerHTML = "";
-
   bookmarks
     .slice()
     .reverse()
@@ -91,33 +92,98 @@ async function saveSettings() {
   alert("Response length updated");
 }
 
+// ─── Loading state ───────────────────────────────────────────────────────────
+let isSending = false;
+
+// Show the user's own message immediately in the thread (Change #5)
+function showUserBubble(prompt) {
+  // Ensure thread section is visible
+  threadSection.style.display = "block";
+  const bubble = document.createElement("div");
+  bubble.className = "message-bubble user-bubble";
+  bubble.dataset.pending = "true";
+  bubble.innerHTML = `
+    <span class="bubble-label">You</span>
+    <p>${escapeHtml(prompt)}</p>
+  `;
+  threadMessages.appendChild(bubble);
+  scrollToBottom();
+}
+
+function showLoadingBubble() {
+  threadSection.style.display = "block";
+  const bubble = document.createElement("div");
+  bubble.className = "loading-bubble";
+  bubble.id = "loadingBubble";
+  bubble.innerHTML = `
+    <span>Generating Response. Thinking</span>
+    <div class="dots"><span></span><span></span><span></span></div>
+  `;
+  threadMessages.appendChild(bubble);
+  scrollToBottom();
+}
+
+function hideLoadingBubble() {
+  const bubble = document.getElementById("loadingBubble");
+  if (bubble) bubble.remove();
+}
+
+function scrollToBottom() {
+  threadMessages.scrollTop = threadMessages.scrollHeight;
+  const scrollArea = document.querySelector(".chat-scroll-area");
+  if (scrollArea) scrollArea.scrollTop = scrollArea.scrollHeight;
+}
+
+// Simple HTML escape to prevent XSS
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 // ─── UC1: Send prompt → auto-save conversation ───────────────────────────────
 async function sendPrompt() {
   const prompt = promptInput.value.trim();
   if (!prompt) return;
+  if (isSending) return;
 
-  // UC3: if a conversation is active, continue it instead of creating new
-  if (activeConversationId !== null) {
-    await continueConversation(prompt);
-    return;
-  }
-
-  // New conversation
-  const res  = await fetch("/api/conversations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, shorten: shortenToggle.checked })
-  });
-  const data = await res.json();
-
-  if (!res.ok) { alert(data.error || "Could not create conversation"); return; }
-
+  isSending = true;
+  sendBtn.disabled = true;
+  sendBtn.textContent = "Sending…";
   promptInput.value = "";
-  activeConversationId = data.id;
 
-  await loadConversations();
-  await loadBookmarks();
-  renderThread(data);
+  // Change #5: Show user's message first, then thinking bubble
+  showUserBubble(prompt);
+  showLoadingBubble();
+
+  try {
+    if (activeConversationId !== null) {
+      await continueConversation(prompt);
+      return;
+    }
+
+    const res  = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, shorten: shortenToggle.checked })
+    });
+    const data = await res.json();
+
+    if (!res.ok) { alert(data.error || "Could not create conversation"); return; }
+
+    activeConversationId = data.id;
+
+    hideLoadingBubble();
+    await loadConversations();
+    await loadBookmarks();
+    renderThread(data);
+  } finally {
+    isSending = false;
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Send";
+  }
 }
 
 // ─── UC3: Continue an existing conversation ───────────────────────────────────
@@ -132,25 +198,23 @@ async function continueConversation(prompt) {
   if (!res.ok) { alert(data.error || "Could not send message"); return; }
 
   promptInput.value = "";
+  hideLoadingBubble();
   renderThread(data);
   await loadConversations();
 }
 
 // ─── UC2: Render a full conversation thread ───────────────────────────────────
 function renderThread(conversation) {
-  // Hide search/response area; show thread
   responseSection.innerHTML = "";
   threadSection.style.display = "block";
 
   activeConversationId = conversation.id;
   threadTitle.textContent = conversation.title;
 
-  // Attach thread-level action buttons
   threadBookmarkBtn.onclick   = () => bookmarkConversation(conversation.id);
   threadUnbookmarkBtn.onclick = () => unbookmarkConversation(conversation.id);
   threadDeleteBtn.onclick     = () => deleteConversation(conversation.id);
 
-  // Build message bubbles from messages array (with legacy fallback)
   threadMessages.innerHTML = "";
 
   const messages = conversation.messages
@@ -163,19 +227,17 @@ function renderThread(conversation) {
     const bubble = document.createElement("div");
     bubble.className = `message-bubble ${msg.role === "user" ? "user-bubble" : "assistant-bubble"}`;
     bubble.innerHTML = `
-      <span class="bubble-label">${msg.role === "user" ? "You" : "Assistant"}</span>
-      <p>${msg.content}</p>
+      <span class="bubble-label">${msg.role === "user" ? "You" : "PistachioAI"}</span>
+      <p>${escapeHtml(msg.content)}</p>
     `;
     threadMessages.appendChild(bubble);
   });
 
-  // Scroll to bottom so latest message is visible
-  threadMessages.scrollTop = threadMessages.scrollHeight;
+  scrollToBottom();
 
-  // Update heading to show continuation hint
-  mainHeading.textContent = "Continue the conversation…";
+  // Change #6: "Continue your conversation…"
+  mainHeading.textContent = "Continue your conversation…";
 
-  // Highlight active item in sidebar
   loadConversations();
 }
 
@@ -183,9 +245,7 @@ function renderThread(conversation) {
 async function openConversation(id) {
   const res  = await fetch(`/api/conversations/${id}`);
   const data = await res.json();
-
   if (!res.ok) { alert(data.error || "Conversation not found"); return; }
-
   renderThread(data);
 }
 
@@ -209,43 +269,32 @@ async function unbookmarkConversation(id) {
 // ─── Delete ───────────────────────────────────────────────────────────────────
 async function deleteConversation(id) {
   if (!confirm("Are you sure you want to delete this conversation?")) return;
-
   const res  = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
   const data = await res.json();
-
   if (!res.ok) { alert(data.error || "Could not delete conversation"); return; }
-
-  // If we just deleted the active conversation, reset view
   if (activeConversationId === id) {
     activeConversationId = null;
     threadSection.style.display = "none";
     threadMessages.innerHTML = "";
     mainHeading.textContent = "How can I help you?";
   }
-
   await loadConversations();
   await loadBookmarks();
 }
 
-// ─── Search ───────────────────────────────────────────────────────────────────
+// ─── Search (modal-based, Change #4) ─────────────────────────────────────────
 async function searchConversations() {
   const query = searchInput.value.trim();
   if (!query) { alert("Please enter a search term"); return; }
 
   const res  = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
   const data = await res.json();
-
   if (!res.ok) { alert(data.error || "Search failed"); return; }
 
-  // Exit thread view, show search results
-  threadSection.style.display = "none";
-  activeConversationId = null;
-  mainHeading.textContent = `Search results for "${query}"`;
-
-  responseSection.innerHTML = "";
+  searchResults.innerHTML = "";
 
   if (data.length === 0) {
-    responseSection.innerHTML = "<p>No matching conversations found.</p>";
+    searchResults.innerHTML = `<p style="color:var(--text-secondary);font-size:14px;">No matching conversations found.</p>`;
     return;
   }
 
@@ -254,20 +303,31 @@ async function searchConversations() {
     .reverse()
     .forEach(conv => {
       const card = document.createElement("div");
-      card.className = "responseCard";
+      card.className = "search-result-card";
       card.innerHTML = `
-        <h3>${conv.title}</h3>
-        <p><strong>Prompt:</strong> ${conv.prompt}</p>
-        <p><strong>Response:</strong> ${conv.response}</p>
-        <div class="responseActions">
-          <button onclick="openConversation(${conv.id})">Open Full Chat</button>
-        </div>
+        <h4>${escapeHtml(conv.title)}</h4>
+        <p>${escapeHtml(conv.prompt.length > 80 ? conv.prompt.slice(0, 80) + "…" : conv.prompt)}</p>
       `;
-      responseSection.appendChild(card);
+      card.addEventListener("click", () => {
+        closeSearch();
+        openConversation(conv.id);
+      });
+      searchResults.appendChild(card);
     });
 }
 
-// ─── New chat button: reset to blank state ────────────────────────────────────
+function openSearch() {
+  searchOverlay.classList.remove("hidden");
+  searchInput.focus();
+}
+
+function closeSearch() {
+  searchOverlay.classList.add("hidden");
+  searchResults.innerHTML = "";
+  searchInput.value = "";
+}
+
+// ─── New chat ─────────────────────────────────────────────────────────────────
 newChatBtn.addEventListener("click", () => {
   activeConversationId = null;
   threadSection.style.display = "none";
@@ -280,11 +340,7 @@ newChatBtn.addEventListener("click", () => {
 
 // ─── Event listeners ──────────────────────────────────────────────────────────
 sendBtn.addEventListener("click", sendPrompt);
-
-promptInput.addEventListener("keydown", e => {
-  if (e.key === "Enter") sendPrompt();
-});
-
+promptInput.addEventListener("keydown", e => { if (e.key === "Enter") sendPrompt(); });
 saveSettingsBtn.addEventListener("click", saveSettings);
 
 if (logoutBtn) {
@@ -294,15 +350,15 @@ if (logoutBtn) {
   });
 }
 
-if (searchBtn)      searchBtn.addEventListener("click", searchConversations);
-if (clearSearchBtn) {
-  clearSearchBtn.addEventListener("click", async () => {
-    searchInput.value = "";
-    responseSection.innerHTML = "";
-    mainHeading.textContent = "How can I help you?";
-    await loadConversations();
-  });
-}
+openSearchBtn.addEventListener("click", openSearch);
+closeSearchBtn.addEventListener("click", closeSearch);
+searchOverlay.addEventListener("click", e => { if (e.target === searchOverlay) closeSearch(); });
+searchBtn.addEventListener("click", searchConversations);
+searchInput.addEventListener("keydown", e => { if (e.key === "Enter") searchConversations(); });
+clearSearchBtn.addEventListener("click", () => {
+  searchInput.value = "";
+  searchResults.innerHTML = "";
+});
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 checkAuth();

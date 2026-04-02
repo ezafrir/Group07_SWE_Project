@@ -33,15 +33,19 @@ Other Tools
 - Git
 
 ## How to Run the Project
-1. Clone the repository:
+1. Install Ollama if not already downloaded: https://ollama.com/download
+2. Run llama3.2: 
+   ollama pull llama3.2
+3. Clone the repository:
    git clone <repo-url>
-3. Navigate into the project folder:
+4. Navigate into the project folder:
    cd Group07_SWE_Project-main
 5. Install dependencies:
    npm install
-7. Start the server:
+6. Start the server:
    node server.js
-9. Open the application in a browser: http://localhost:3000
+4. Open the application in a browser: http://localhost:3000
+
 ## Running Unit Tests
 The project uses Jasmine for unit testing. Run tests using: npx jasmine
 Example output: 13 specs, 0 failures

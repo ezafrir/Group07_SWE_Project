@@ -1,3 +1,10 @@
+// ============================================================
+// server.js — CHANGED: createConversation and addMessageToConversation
+//             are now async functions to support the async Ollama
+//             API call in llmService.js. The two POST route handlers
+//             that call them are also now async with try/catch blocks
+//             to return clean error messages if Ollama is unavailable.
+// ============================================================
 const path = require("path");
 const express = require("express");
 
@@ -36,17 +43,34 @@ function shortenResponse(text, maxWords) {
   return words.slice(0, maxWords).join(" ");
 }
 
-function createConversation(prompt, shorten, userId) {
-  let response = generateLLMResponse(prompt);
+// Generate a short, descriptive summary title using the LLM
+async function generateChatTitle(prompt) {
+  try {
+    const titlePrompt = `Summarize the following question or topic in 4-7 words as a concise chat title. Use title case. No quotes, no punctuation at the end. Just the title.\n\nQuestion: ${prompt}`;
+    const rawTitle = await generateLLMResponse(titlePrompt);
+    // Clean up: strip quotes, trim whitespace, limit length
+    const cleaned = rawTitle.replace(/["']/g, "").trim();
+    return cleaned.length > 60 ? cleaned.slice(0, 60) + "…" : cleaned;
+  } catch {
+    // Fallback to truncated prompt if LLM fails
+    return prompt.length > 40 ? prompt.slice(0, 40) + "…" : prompt;
+  }
+}
+
+// CHANGED: Now async — must await the Ollama API call inside generateLLMResponse
+async function createConversation(prompt, shorten, userId) {
+  let response = await generateLLMResponse(prompt); // CHANGED: await added
 
   if (shorten) {
     response = shortenResponse(response, settings.responseLength);
   }
 
+  const title = await generateChatTitle(prompt);
+
   const conversation = {
     id: nextId++,
     userId,
-    title: prompt.length > 30 ? prompt.slice(0, 30) + "..." : prompt,
+    title,
     prompt,
     response,
     messages: [
@@ -62,13 +86,14 @@ function createConversation(prompt, shorten, userId) {
   return conversation;
 }
 
-function addMessageToConversation(id, prompt, shorten, userId) {
+// CHANGED: Now async — must await the Ollama API call inside generateLLMResponse
+async function addMessageToConversation(id, prompt, shorten, userId) {
   const conversation = conversations.find(
     c => c.id === id && c.userId === userId
   );
   if (!conversation) return null;
 
-  let response = generateLLMResponse(prompt);
+  let response = await generateLLMResponse(prompt); // CHANGED: await added
   if (shorten) {
     response = shortenResponse(response, settings.responseLength);
   }
@@ -251,23 +276,30 @@ app.get("/api/conversations/:id", requireAuth, (req, res) => {
   res.json(conversation);
 });
 
-app.post("/api/conversations", requireAuth, (req, res) => {
+// CHANGED: Route handler is now async to await the Ollama response
+app.post("/api/conversations", requireAuth, async (req, res) => {
   const { prompt, shorten } = req.body;
 
   if (!prompt || !prompt.trim()) {
     return res.status(400).json({ error: "Prompt is required." });
   }
 
-  const conversation = createConversation(
-    prompt.trim(),
-    shorten,
-    req.session.user.id
-  );
-
-  res.status(201).json(conversation);
+  // CHANGED: try/catch added to handle Ollama errors gracefully
+  try {
+    const conversation = await createConversation( // CHANGED: await added
+      prompt.trim(),
+      shorten,
+      req.session.user.id
+    );
+    res.status(201).json(conversation);
+  } catch (err) {
+    console.error("Ollama error:", err.message);
+    res.status(502).json({ error: `LLM service error: ${err.message}` });
+  }
 });
 
-app.post("/api/conversations/:id/messages", requireAuth, (req, res) => {
+// CHANGED: Route handler is now async to await the Ollama response
+app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const { prompt, shorten } = req.body;
 
@@ -275,18 +307,24 @@ app.post("/api/conversations/:id/messages", requireAuth, (req, res) => {
     return res.status(400).json({ error: "Prompt is required." });
   }
 
-  const conversation = addMessageToConversation(
-    id,
-    prompt.trim(),
-    shorten,
-    req.session.user.id
-  );
+  // CHANGED: try/catch added to handle Ollama errors gracefully
+  try {
+    const conversation = await addMessageToConversation( // CHANGED: await added
+      id,
+      prompt.trim(),
+      shorten,
+      req.session.user.id
+    );
 
-  if (!conversation) {
-    return res.status(404).json({ error: "Conversation not found." });
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found." });
+    }
+
+    res.json(conversation);
+  } catch (err) {
+    console.error("Ollama error:", err.message);
+    res.status(502).json({ error: `LLM service error: ${err.message}` });
   }
-
-  res.json(conversation);
 });
 
 app.delete("/api/conversations/:id", requireAuth, (req, res) => {

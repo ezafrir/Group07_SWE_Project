@@ -1,5 +1,5 @@
 ## LLM Web Interface Prototype
-SOFTWARE ENGINEERING | (14:332:452) Section 01 | [17380] at Rutgers University
+SOFTWARE ENGINEERING | (14:332:452) Section 01 | [17380] at Rutgers University-New Brunswick
 
 **Authors:** Pravalika Chintakindi, Siddhartha Tamma, Ruchi Kapse, Emma Zafrir, Srinidhi Ganeshan, Eileen Rashduni
 

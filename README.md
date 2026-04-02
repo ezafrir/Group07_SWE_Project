@@ -37,7 +37,7 @@ Other Tools
 2. Run llama3.2 in the terminal by entering: 
    ollama pull llama3.2
 3. Clone the repository:
-   git clone <repo-url>
+   git clone <repo-urhttps://github.com/ezafrir/Group07_SWE_Projectl>
 4. Navigate into the project folder in the terminal by entering:
    cd Group07_SWE_Project-main
 5. Install dependencies by entering:

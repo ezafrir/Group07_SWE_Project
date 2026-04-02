@@ -34,15 +34,15 @@ Other Tools
 
 ## How to Run the Project
 1. Install Ollama if not already downloaded: https://ollama.com/download
-2. Run llama3.2: 
+2. Run llama3.2 in the terminal by entering: 
    ollama pull llama3.2
 3. Clone the repository:
    git clone <repo-url>
-4. Navigate into the project folder:
+4. Navigate into the project folder in the terminal by entering:
    cd Group07_SWE_Project-main
-5. Install dependencies:
+5. Install dependencies by entering:
    npm install
-6. Start the server:
+6. Start the server by entering:
    node server.js
 4. Open the application in a browser: http://localhost:3000
 

@@ -10,7 +10,6 @@
  *   1. npm install (in this folder)
  *   2. node server.js  (in the main project folder — must be running on :3000)
  *
- * Each suite uses a fresh browser page so sessions never bleed between tests.
  * Exit code 0 = all passed, 1 = at least one failure.
  */
 
@@ -20,7 +19,10 @@ const BASE = "http://localhost:3000";
 let pass = 0;
 let fail = 0;
 
-// ── Tiny assertion helper ─────────────────────────────────────────────────────
+const unique = Date.now();
+const TEST_USER = `puppetuser${unique}`;
+const TEST_EMAIL = `puppet${unique}@test.com`;
+const TEST_PASS = "testpass";
 
 function check(condition, label) {
   if (condition) {
@@ -34,6 +36,16 @@ function check(condition, label) {
 
 function pause(ms) {
   return new Promise(r => setTimeout(r, ms));
+}
+
+async function runSuite(name, fn) {
+  console.log(`\n${name}`);
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`  ❌ Suite crashed: ${err.message}`);
+    fail++;
+  }
 }
 
 async function clickFirstAvailable(page, selectors) {
@@ -70,159 +82,128 @@ async function getTextFirstAvailable(page, selectors) {
   throw new Error(`None of these selectors were found: ${selectors.join(", ")}`);
 }
 
-// ── Run all suites ─────────────────────────────────────────────────────────────
-
 (async () => {
+  console.log("Launching browser...");
   const browser = await puppeteer.launch({
     headless: false,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    dumpio: true,
+    protocolTimeout: 120000,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu"
+    ]
   });
+  console.log("Browser launched successfully");
 
   let p;
 
   async function newPage() {
-    const p = await browser.newPage();
-    await p.setViewport({ width: 1280, height: 800 });
-    return p;
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 800 });
+    return page;
   }
 
-  // Helper: sign up and land on /app
-  async function signUp(p, username, email, password) {
-    await p.goto(BASE, { waitUntil: "networkidle0" });
-    await p.waitForSelector("#signupUsername", { visible: true });
-    await p.type("#signupUsername", username);
-    await p.type("#signupEmail", email);
-    await p.type("#signupPassword", password);
-    await p.click("#signupBtn");
-    await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
+  async function signUp(page, username, email, password) {
+    await page.goto(BASE, { waitUntil: "networkidle0" });
+    await page.waitForSelector("#signupUsername", { visible: true, timeout: 10000 });
+    await page.type("#signupUsername", username);
+    await page.type("#signupEmail", email);
+    await page.type("#signupPassword", password);
+    await page.click("#signupBtn");
+    await page.waitForNavigation({ waitUntil: "networkidle0", timeout: 10000 }).catch(() => {});
+    await pause(1000);
   }
 
-  // ── Suite 1: Landing Page ───────────────────────────────────────────────────
-  console.log("\n📄  Suite 1: Landing Page");
-  {
-    const p = await newPage();
-    await p.goto(BASE, { waitUntil: "networkidle0" });
+  await runSuite("📄 Suite 1: Landing Page", async () => {
+    const p1 = await newPage();
+    await p1.goto(BASE, { waitUntil: "networkidle0" });
 
-    const h1 = await p.$eval("h1", el => el.textContent.trim());
+    const h1 = await p1.$eval("h1", el => el.textContent.trim());
     check(h1.includes("LLM Web Interface"), "h1 contains 'LLM Web Interface'");
-    check(await p.$("#signupBtn") !== null, "Sign Up button is present");
-    check(await p.$("#loginBtn") !== null,  "Log In button is present");
+    check(await p1.$("#signupBtn") !== null, "Sign Up button is present");
+    check(await p1.$("#loginBtn") !== null, "Log In button is present");
 
-    await p.close();
-  }
+    await p1.close();
+  });
 
-  // ── Suite 2: Successful Sign Up ─────────────────────────────────────────────
-  console.log("\n👤  Suite 2: Successful Sign Up");
-  {
+  await runSuite("👤 Suite 2: Successful Sign Up", async () => {
     p = await newPage();
-    await signUp(p, "puppetuser", "puppet@test.com", "testpass");
+    await signUp(p, TEST_USER, TEST_EMAIL, TEST_PASS);
 
-    check(p.url().includes("index.html"), "Redirected to index.html after signup");
+    const url = p.url();
+    check(
+      url.includes("index.html") || url.includes("/app"),
+      `Redirected after signup: ${url}`
+    );
+
     const info = await p.$eval("#userInfo", el => el.textContent.trim());
-    check(info.includes("puppetuser"), `Username shown in header: "${info}"`);
+    check(info.includes(TEST_USER), `Username shown in header: "${info}"`);
+  });
 
-
-  }
-
-
-// ── Suite 3: Login  ─────────────────────────────────────────────────────
-  console.log("\n🔑 Suite 3: Login & Validation Flow");
-  {
-    // Use the SAME page 'p' from Suite 2 (don't create a new one)
-    
-    // STEP 1: LOG OUT
-    await p.waitForSelector("#logoutBtn", { visible: true });
+  await runSuite("🔑 Suite 3: Login & Validation Flow", async () => {
+    console.log("  -> logging out");
+    await p.waitForSelector("#logoutBtn", { visible: true, timeout: 10000 });
     await p.click("#logoutBtn");
-    await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
-    console.log("  ✅ Logged out successfully");
+    await pause(1000);
 
-    // STEP 2: INCORRECT LOGIN (Suite 5 logic combined)
-    await p.waitForSelector("#loginEmail", { visible: true });
-    await p.type("#loginEmail", "puppet@test.com");
+    console.log("  -> waiting for login form");
+    await p.waitForSelector("#loginEmail", { visible: true, timeout: 10000 });
+
+    console.log("  -> attempting wrong login");
+    await p.type("#loginEmail", TEST_EMAIL);
     await p.type("#loginPassword", "WRONG_PASSWORD");
     await p.click("#loginBtn");
-    await pause(500); // Give the error message a moment to appear
-    
+    await pause(1000);
+
     const err = await p.$eval("#authMessage", el => el.textContent.trim());
     check(err === "Invalid email or password.", "Correctly blocked incorrect login");
 
-    // STEP 3: CORRECT LOGIN
-    // Clear the wrong password first
-    await p.click("#loginPassword", { clickCount: 3 }); 
-    await p.keyboard.press('Backspace');
-    
-    await p.type("#loginPassword", "testpass"); // The real password from Suite 2
+    console.log("  -> attempting correct login");
+    await p.click("#loginPassword", { clickCount: 3 });
+    await p.keyboard.press("Backspace");
+    await p.type("#loginPassword", TEST_PASS);
     await p.click("#loginBtn");
-    await p.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
+    await pause(1500);
 
-    check(p.url().includes("index.html"), "Redirected back to app after correct login");
-    console.log("  ✅ Logged back in successfully");
-  }
+    const url = p.url();
+    check(
+      url.includes("index.html") || url.includes("/app"),
+      `Redirected after correct login: ${url}`
+    );
+  });
 
+  await runSuite("💬 Suite 4: Continue Conversation Flow", async () => {
+    await p.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
 
-  // ── Suite 4: Continue Conversation ─────────────────────────────────────────
-  console.log("\n💬 Suite 4: Continue Conversation Flow");
-  {
-    // We are already logged in from Suite 3
-
-    // Wait for prompt input
-    await p.waitForSelector("#promptInput", { visible: true });
-
-    // STEP 1: Send first prompt (creates conversation)
     await p.type("#promptInput", "What is recursion?");
     await p.click("#sendBtn");
 
-    // Wait for assistant response
     await p.waitForFunction(() => {
       const thread = document.querySelector("#threadMessages");
-      if (!thread) return false;
-      return thread.innerText.length > 0;
-    }, { timeout: 20000 });
+      return thread && thread.innerText.trim().length > 0;
+    }, { timeout: 30000 });
 
-    console.log("  ✅ First message sent");
-
-    // STEP 2: Send second prompt (continue conversation)
     await p.click("#promptInput", { clickCount: 3 });
     await p.keyboard.press("Backspace");
-
     await p.type("#promptInput", "Give me a simple example");
     await p.click("#sendBtn");
 
-    // Wait again for assistant response
     await p.waitForFunction(() => {
       const thread = document.querySelector("#threadMessages");
-      if (!thread) return false;
-      return thread.innerText.includes("Give me a simple example");
-    }, { timeout: 20000 });
+      return thread && thread.innerText.includes("Give me a simple example");
+    }, { timeout: 30000 });
 
-    console.log("  ✅ Second message sent");
-
-    // STEP 3: Validate both prompts exist in thread
     const threadText = await p.$eval("#threadMessages", el => el.innerText);
+    check(threadText.includes("What is recursion?"), "First message exists in conversation");
+    check(threadText.includes("Give me a simple example"), "Second message exists in conversation");
 
-    check(
-      threadText.includes("What is recursion?"),
-      "First message exists in conversation"
-    );
-
-    check(
-      threadText.includes("Give me a simple example"),
-      "Second message exists in conversation"
-    );
-
-    // STEP 4: Check heading changed (optional but strong)
     const heading = await p.$eval("#mainHeading", el => el.textContent.trim());
+    check(heading.includes("Continue"), "Heading updated to continue conversation");
+  });
 
-    check(
-      heading.includes("Continue"),
-      "Heading updated to continue conversation"
-    );
-  }
-
-    // ── Suite 5: Bookmark Conversation ─────────────────────────────────────────
-  console.log("\n🔖 Suite 5: Bookmark Conversation");
-  {
-    // Try common bookmark button selectors
+  await runSuite("🔖 Suite 5: Bookmark Conversation", async () => {
     await clickFirstAvailable(p, [
       "#bookmarkBtn",
       ".bookmark-btn",
@@ -245,12 +226,9 @@ async function getTextFirstAvailable(page, selectors) {
       bookmarkText.includes("Give me a simple example"),
       "Bookmarked conversation appears in bookmark list"
     );
-  }
+  });
 
-
-  // ── Suite 6: Search Conversation ───────────────────────────────────────────
-  console.log("\n🔎 Suite 6: Search Conversation");
-  {
+  await runSuite("🔎 Suite 6: Search Conversation", async () => {
     await typeFirstAvailable(p, [
       "#searchInput",
       "#searchBar",
@@ -273,15 +251,13 @@ async function getTextFirstAvailable(page, selectors) {
       convoListText.toLowerCase().includes("recursion"),
       "Search results show the matching conversation"
     );
-  }
+  });
 
-    // ── Suite 7: Word Limit / Shorten Response ─────────────────────────────────
-  console.log("\n✂️ Suite 7: Word Limit / Shorten Response");
-  {
-    // Turn on shorten response if checkbox exists
-    const shortenToggle = await p.$("#shortenToggle") ||
-                          await p.$("[data-testid='shortenToggle']") ||
-                          await p.$("input[type='checkbox']");
+  await runSuite("✂️ Suite 7: Word Limit / Shorten Response", async () => {
+    const shortenToggle =
+      await p.$("#shortenToggle") ||
+      await p.$("[data-testid='shortenToggle']") ||
+      await p.$("input[type='checkbox']");
 
     if (shortenToggle) {
       const isChecked = await p.evaluate(el => el.checked, shortenToggle);
@@ -293,7 +269,6 @@ async function getTextFirstAvailable(page, selectors) {
       check(false, "Shorten response toggle found");
     }
 
-    // Set max words if input exists
     try {
       await typeFirstAvailable(p, [
         "#maxWordsInput",
@@ -302,41 +277,28 @@ async function getTextFirstAvailable(page, selectors) {
         "input[type='number']",
         "[data-testid='maxWordsInput']"
       ], "10");
-
       check(true, "Word limit input set to 10");
     } catch (err) {
       check(false, "Word limit input found");
     }
 
-    // Save settings if button exists
-    const saveBtn = await p.$("#saveSettingsBtn") ||
-                    await p.$("[data-testid='saveSettingsBtn']") ||
-                    await p.$("button");
+    const allButtons = await p.$$("button");
+    let clicked = false;
 
-    if (saveBtn) {
-      const allButtons = await p.$$("button");
-      let clicked = false;
-
-      for (const btn of allButtons) {
-        const text = await p.evaluate(el => el.textContent.trim(), btn);
-        if (
-          text.toLowerCase().includes("save") ||
-          text.toLowerCase().includes("settings")
-        ) {
-          await btn.click();
-          clicked = true;
-          break;
-        }
-      }
-
-      if (clicked) {
-        check(true, "Settings saved");
-      } else {
-        check(false, "Save settings button located");
+    for (const btn of allButtons) {
+      const text = await p.evaluate(el => el.textContent.trim(), btn);
+      if (
+        text.toLowerCase().includes("save") ||
+        text.toLowerCase().includes("settings")
+      ) {
+        await btn.click();
+        clicked = true;
+        break;
       }
     }
 
-    // Send a new prompt to test shortened response
+    check(clicked, "Settings saved");
+
     await typeFirstAvailable(p, [
       "#promptInput",
       "[data-testid='promptInput']",
@@ -353,20 +315,17 @@ async function getTextFirstAvailable(page, selectors) {
     await p.waitForFunction(() => {
       const thread = document.querySelector("#threadMessages");
       return thread && thread.innerText.trim().length > 0;
-    }, { timeout: 20000 });
+    }, { timeout: 30000 });
 
     const threadText = await p.$eval("#threadMessages", el => el.innerText);
-
     const lines = threadText.split("\n").map(s => s.trim()).filter(Boolean);
     const latestChunk = lines.slice(-6).join(" ");
     const wordCount = latestChunk.split(/\s+/).filter(Boolean).length;
 
     check(wordCount <= 40, "Response appears shortened after word-limit setting");
-  }
+  });
 
-    // ── Suite 8: Delete Conversation (Optional) ────────────────────────────────
-  console.log("\n🗑️ Suite 8: Delete Conversation");
-  {
+  await runSuite("🗑️ Suite 8: Delete Conversation", async () => {
     const beforeText = await getTextFirstAvailable(p, [
       "#conversationList",
       "#chatList",
@@ -393,13 +352,9 @@ async function getTextFirstAvailable(page, selectors) {
       "[data-testid='conversationList']"
     ]);
 
-    check(
-      beforeText !== afterText,
-      "Conversation list changed after deletion"
-    );
-  }
+    check(beforeText !== afterText, "Conversation list changed after deletion");
+  });
 
-  // ── Summary ─────────────────────────────────────────────────────────────────
   await browser.close();
 
   console.log(`\n${"─".repeat(55)}`);
@@ -411,5 +366,3 @@ async function getTextFirstAvailable(page, selectors) {
   console.error("Fatal error in test runner:", err);
   process.exit(1);
 });
-
-

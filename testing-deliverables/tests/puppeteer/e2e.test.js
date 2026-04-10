@@ -92,7 +92,11 @@ async function waitForAlertAndAccept(page) {
   console.log("Browser launched successfully");
 
   const p = await browser.newPage();
-  await p.setViewport({ width: 1400, height: 900 });
+  await p.setViewport({
+  width: 1400,
+  height: 900,
+});
+
 
   await runSuite("📄 Suite 1: Landing Page", async () => {
     await p.goto(BASE, { waitUntil: "networkidle2" });

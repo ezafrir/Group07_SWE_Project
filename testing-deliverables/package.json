@@ -10,7 +10,8 @@
     "test:all": "npm run test:cucumber && npm run test:e2e"
   },
   "devDependencies": {
-    "@cucumber/cucumber": "^10.0.0"
+    "@cucumber/cucumber": "^10.0.0",
+    "eslint": "^9.22.0"
   },
   "dependencies": {
     "puppeteer-core": "^24.40.0"

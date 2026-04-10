@@ -16,4 +16,17 @@
   "dependencies": {
     "puppeteer-core": "^24.40.0"
   }
+
+  },
+  "eslintConfig": {
+    "env": {
+      "node": true,
+      "es2021": true
+    },
+    "extends": "eslint:recommended",
+    "parserOptions": {
+      "ecmaVersion": 2021
+    },
+    "rules": {}
+  }
 }

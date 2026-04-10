@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "puppeteer-core": "^24.40.0"
-  }
 
   },
   "eslintConfig": {

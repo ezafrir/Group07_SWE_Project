@@ -4,7 +4,7 @@
   "description": "Testing team deliverables — Cucumber acceptance tests and Puppeteer E2E",
   "scripts": {
     "test:unit": "cd .. && npx jasmine",
-    "lint": "eslint ."
+    "lint": "eslint .",
     "test:cucumber": "cucumber-js",
     "test:e2e": "node tests/puppeteer/e2e.test.js",
     "test:all": "npm run test:cucumber && npm run test:e2e"

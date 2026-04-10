@@ -15,21 +15,21 @@
   },
   "dependencies": {
     "puppeteer-core": "^24.40.0"
-
   },
   "eslintConfig": {
-  "env": {
-    "node": true,
-    "browser": true,
-    "es2021": true,
-    "jest": true
-  },
-  "extends": "eslint:recommended",
-  "parserOptions": {
-    "ecmaVersion": 2021
-  },
-  "rules": {
-    "no-unused-vars": "off",
-    "no-empty": "off"
+    "env": {
+      "node": true,
+      "browser": true,
+      "es2021": true,
+      "jest": true
+    },
+    "extends": "eslint:recommended",
+    "parserOptions": {
+      "ecmaVersion": 2021
+    },
+    "rules": {
+      "no-unused-vars": "off",
+      "no-empty": "off"
+    }
   }
 }

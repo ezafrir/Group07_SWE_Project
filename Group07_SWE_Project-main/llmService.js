@@ -62,10 +62,14 @@ async function callOllama(model, userPrompt, systemPrompt = null) {
   messages.push({ role: "user", content: userPrompt });
  
   const requestBody = {
-    model,
-    messages,
-    stream: false // stream:false gives us one complete JSON response
-  };
+  model,
+  messages,
+  stream: false,
+  options: {
+    num_predict: 8192,   // max tokens to generate, increase this for long files
+    temperature: 0.2     // lower = more conservative, less creative, better for code
+  }
+};
  
   let response;
   try {
@@ -137,7 +141,16 @@ NOT ALLOWED:
 - Returning anything other than the raw, complete, updated file content
  
 OUTPUT FORMAT -- THIS IS MANDATORY:
-- Return ONLY the complete updated file content
+- Return the change as a precise search-and-replace block in this exact format:
+
+   <<<FIND>>>
+   (the exact lines to replace — copy them verbatim from the file)
+   <<<REPLACE>>>
+   (the new lines to substitute in)
+   <<<END>>>
+
+   If adding something new with no replacement, use an empty FIND block.
+   Do not return anything else.
 - No markdown code fences (no \`\`\`javascript or \`\`\` of any kind)
 - No explanation, no preamble, no commentary
 - No "Here is the updated file:" or similar

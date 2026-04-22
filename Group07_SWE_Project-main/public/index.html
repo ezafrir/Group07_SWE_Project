@@ -59,6 +59,8 @@
             <button class="theme-toggle-app" id="themeToggleApp" title="Toggle theme" aria-label="Toggle theme">
               <span class="theme-icon">🌿</span>
             </button>
+            <!-- Suggest a Change button: opens the self-modification panel -->
+            <button class="suggest-btn" id="openSuggestBtn" title="Suggest a UI change">✦ Suggest a Change</button>
             <span id="userInfo" class="user-info-text"></span>
             <button id="logoutBtn" class="logout-btn">Log Out</button>
           </div>
@@ -119,6 +121,49 @@
         </div>
       </div>
       <div id="searchResults" class="search-results"></div>
+    </div>
+  </div>
+
+
+  <div class="search-modal-overlay hidden" id="suggestOverlay">
+    <div class="search-modal suggest-modal">
+      <div class="search-modal-header">
+        <h3>✦ Suggest a Change</h3>
+        <button class="search-modal-close" id="closeSuggestBtn">✕</button>
+      </div>
+      <div class="search-modal-body">
+
+        <!-- File selector: only public/ files are allowed by the server -->
+        <label class="settings-label" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
+          <span style="font-size:13px;font-weight:600;">File to modify</span>
+          <select id="suggestFile" class="auth-input" style="cursor:pointer;">
+            <option value="public/app.js">public/app.js — Frontend logic</option>
+            <option value="public/index.html">public/index.html — Main UI layout</option>
+            <option value="public/style.css">public/style.css — Styles</option>
+            <option value="public/landing.html">public/landing.html — Login page</option>
+            <option value="public/landing.js">public/landing.js — Login logic</option>
+          </select>
+        </label>
+
+        <!-- Natural language instruction from the user -->
+        <label class="settings-label" style="display:flex;flex-direction:column;gap:6px;">
+          <span style="font-size:13px;font-weight:600;">Your instruction</span>
+          <textarea
+            id="suggestInstruction"
+            class="auth-input"
+            placeholder="Describe the change you want, e.g. 'Add a character counter below the prompt input that shows how many characters have been typed'"
+            style="min-height:100px;resize:vertical;font-family:inherit;font-size:14px;padding:10px;"
+          ></textarea>
+        </label>
+
+        <div class="search-modal-actions" style="margin-top:14px;">
+          <button id="suggestSubmitBtn" class="auth-btn primary-btn">Apply Change</button>
+          <button id="suggestCancelBtn" class="auth-btn secondary-btn">Cancel</button>
+        </div>
+
+        <!-- Status message shown while waiting for DeepSeek, and after -->
+        <p id="suggestStatus" style="margin-top:14px;font-size:13px;color:var(--text-secondary);min-height:20px;"></p>
+      </div>
     </div>
   </div>
 

@@ -455,7 +455,7 @@ app.put("/api/settings/response-length", requireAuth, (req, res) => {
 // this means so that if the constitution fails (hopefully it does not), it will be stopped anyways
 
 const PROJECT_ROOT = __dirname;//serevr.js lives here
-const ALLOWED_DIRS = ["public"], //only frontend folder is writeable
+const ALLOWED_DIRS = ["public"]; //only frontend folder is writeable
 const BACKUP_DIR = path.join(PROJECT_ROOT, ".llm_backups");
 
 //backupFile copies a file to .llm_backups/ with a timestamp in the file name before any llm write happens

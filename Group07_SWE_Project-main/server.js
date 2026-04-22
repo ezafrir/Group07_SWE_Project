@@ -1,10 +1,5 @@
-// ============================================================
-// server.js — CHANGED: createConversation and addMessageToConversation
-//             are now async functions to support the async Ollama
-//             API call in llmService.js. The two POST route handlers
-//             that call them are also now async with try/catch blocks
-//             to return clean error messages if Ollama is unavailable.
-// ============================================================
+
+
 const path = require("path");
 const express = require("express");
 

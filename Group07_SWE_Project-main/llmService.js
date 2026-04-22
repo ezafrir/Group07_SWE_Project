@@ -98,16 +98,8 @@ async function callOllama(model, userPrompt, systemPrompt = null) {
 
 // exported function 1 for normal chat
 async function generateLLMResponse(prompt) {
-  const requestBody = {
-    model: OLLAMA_MODEL,
-    messages: [
-      {
-        role: "user",
-        content: prompt
-      }
-    ],
-    stream: false // CHANGED: stream:false so we get one complete JSON response
-  };
+  return callOllama(CHAT_MODEL, prompt);
+}
 
 
 
@@ -158,40 +150,16 @@ CONSTITUTION_VIOLATION: Your instruction violates the rules of this system and c
 
 
 
-
-  // CHANGED: Call the Ollama API running locally
-  let response;
-  try {
-    response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-        // NOTE: No Authorization header needed — Ollama has no API key by default.
-        //       If you add auth to your Ollama server later, add:
-        //         "Authorization": "Bearer YOUR_TOKEN"
-      },
-      body: JSON.stringify(requestBody)
-    });
-  } catch (err) {
-    // CHANGED: Friendly error if Ollama isn't running
-    throw new Error(
-      `Could not reach Ollama at ${OLLAMA_BASE_URL}. ` +
-      `Make sure Ollama is installed and running ("ollama serve"). ` +
-      `Original error: ${err.message}`
-    );
-  }
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Ollama returned HTTP ${response.status}: ${errorText}. ` +
-      `Check that the model "${OLLAMA_MODEL}" is pulled (run: ollama pull ${OLLAMA_MODEL}).`
-    );
-  }
-
-  // CHANGED: Parse the JSON and extract the assistant's reply
-  const data = await response.json();
-  return data.message.content; // Ollama chat response structure
+async function generateCodeModification(instruction, fileContents, filePath) {
+  // We embed both the file path and the full current source into the user
+  // message. This gives the model full context: it knows which file it is
+  // editing and exactly what the code looks like right now.
+  const userPrompt =
+    `File to modify: ${filePath}\n\n` +
+    `Current file contents:\n${fileContents}\n\n` +
+    `Instruction: ${instruction}`;
+ 
+  return callOllama(CODE_MODEL, userPrompt, CONSTITUTION);
 }
-
-module.exports = generateLLMResponse;
+ 
+module.exports = { generateLLMResponse, generateCodeModification };

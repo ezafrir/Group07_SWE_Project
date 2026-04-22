@@ -289,7 +289,7 @@ app.post("/api/conversations", requireAuth, async (req, res) => {
   }
 
   try {
-    const conversation = await createConversation( // CHANGED: await added
+    const conversation = await createConversation( 
       prompt.trim(),
       shorten,
       req.session.user.id
@@ -301,7 +301,6 @@ app.post("/api/conversations", requireAuth, async (req, res) => {
   }
 });
 
-// CHANGED: Route handler is now async to await the Ollama response
 app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const { prompt, shorten } = req.body;
@@ -310,9 +309,8 @@ app.post("/api/conversations/:id/messages", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Prompt is required." });
   }
 
-  // CHANGED: try/catch added to handle Ollama errors gracefully
-  try {
-    const conversation = await addMessageToConversation( // CHANGED: await added
+ try {
+    const conversation = await addMessageToConversation( 
       id,
       prompt.trim(),
       shorten,
@@ -429,6 +427,18 @@ app.put("/api/settings/response-length", requireAuth, (req, res) => {
     settings
   });
 });
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Start server 
 if (require.main === module) {

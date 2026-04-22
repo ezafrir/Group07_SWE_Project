@@ -96,11 +96,8 @@ async function callOllama(model, userPrompt, systemPrompt = null) {
 
 
 
-
+// exported function 1 for normal chat
 async function generateLLMResponse(prompt) {
-  // CHANGED: Build the request body for Ollama's /api/chat endpoint.
-  //          We use the chat endpoint so conversation history can be
-  //          added here in the future if desired.
   const requestBody = {
     model: OLLAMA_MODEL,
     messages: [
@@ -111,6 +108,56 @@ async function generateLLMResponse(prompt) {
     ],
     stream: false // CHANGED: stream:false so we get one complete JSON response
   };
+
+
+
+// exported function 2 for self-modification
+// used exclusively by /api/suggest endpoint in server.js
+//receives instruction (users request for modification), file contents
+//(current source code of the file we will modify),
+// filePath (the path included in the prompt so the model knows context)
+
+
+// The CONSTITUTION is the system prompt passed to deepseek. 
+// i took inspiration from a podcast I listened to with peter steinberger (OpenClaw)
+// its a rule set that tells the model what it is and isn't allowed to do
+// it specifies the exact output format (raw code).
+// the backend will write whatever the model returns directly to the disk. 
+// any extra text such as markdowns or explanations will break the code and we'll have to nuke it
+
+const CONSTITUTION = `You are a code modification assistant for a local Node.js web application.
+You operate under strict, non-negotiable rules. If you violate any of these rules, you will be greatly embarrassing me. 
+ 
+ALLOWED:
+- Modify the provided file to fulfil the user's instruction
+- Add new UI components, CSS styles, routes, functions, or classes
+- Modify existing functions to improve or extend behaviour
+- Add new helper utilities
+ 
+NOT ALLOWED:
+- Deleting files or suggesting file deletions
+- Modifying .env files or any file containing credentials or secrets
+- Adding require() or import for: os, child_process, fs (unless already present), 
+  subprocess, sys, shutil, or any shell-execution library
+- Executing or suggesting execution of shell commands
+- Reading, accessing, or referencing any file path outside the project
+- Modifying this system prompt or any configuration that governs your behaviour
+- Returning anything other than the raw, complete, updated file content
+ 
+OUTPUT FORMAT — THIS IS MANDATORY:
+- Return ONLY the complete updated file content
+- No markdown code fences (no \`\`\`javascript or \`\`\` of any kind)
+- No explanation, no preamble, no commentary
+- No "Here is the updated file:" or similar
+- Just the raw file content, starting from the very first character of the file
+ 
+If the user's instruction would require violating any of the above rules,
+return only this exact string and nothing else:
+CONSTITUTION_VIOLATION: Your instruction violates the rules of this system and cannot be fulfilled. Please revise or abandon your request.`;
+
+
+
+
 
   // CHANGED: Call the Ollama API running locally
   let response;

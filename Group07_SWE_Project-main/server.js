@@ -430,8 +430,49 @@ app.put("/api/settings/response-length", requireAuth, (req, res) => {
 
 
 
+// Self-modification system----------------------------------------------
 
+//emma requirements:
+// 1. the user types a suggestion in the UI in NL
+// 2. the frontend POSTs to /api/suggest with {filePath, instruction}
+// 3. server validates the path is inside the project using path scoping
+//4, server backs up the file before touching it (backup system) so we don't need to nuke the local code if it breaks
+// 5. server reads the current file contents
+//6. server calls generateCodeModification() which sends the constitution & file contents 
+// & instruction to deepeek llm via ollama. 
+//7. server validates the returned code (syntac check)
+// 8. server checks with the constitution to see if the model followed or returned a violation
+//9. server writes new file to disk
+//10, server responds with {success, backedUpTo, message}
 
+//we should have 3 safety layers here:
+//1. Constitution: Lives inside generateCodeModification() in llmService.js
+//2. Path scoping: safeWrite() will be below
+//3. Layer 3: File backups: backupFile() will also eventually be below.
+
+//ALLOWED_DIRS defines which directories the LLM is allowed to write to
+//if it tries to write outside these folders, it wil be rejected in the server level
+// this means so that if the constitution fails (hopefully it does not), it will be stopped anyways
+
+const PROJECT_ROOT = __dirname;//serevr.js lives here
+const ALLOWED_DIRS = ["public"], //only frontend folder is writeable
+const BACKUP_DIR = path.join(PROJECT_ROOT, ".llm_backups");
+
+//backupFile copies a file to .llm_backups/ with a timestamp in the file name before any llm write happens
+//IF THE WRITE GOES WRONG!!!!!! the user can find their og file in .llm_backups/ and restore it manually. 
+
+function backupFile(filePath){
+  //creates backup dir if it dne
+  
+fs.mkdirSync(BACKUP_DIR, { recursive: true });//wont throw if the folder already exists.
+
+  const timestamp  = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename   = path.basename(filePath);
+  const backupPath = path.join(BACKUP_DIR, `${filename}.${timestamp}.bak`);
+
+  fs.copyFileSync(filePath, backupPath);
+  return backupPath; // return the path so the API response can tell the user where it is
+}
 
 
 

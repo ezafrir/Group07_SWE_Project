@@ -564,6 +564,11 @@ app.post("/api/suggest", requireAuth, async (req, res) => {
     return res.status(502).json({ error: `Code model error: ${err.message}` });
   }
 
+
+  //debug!!!
+  console.log("=== DeepSeek raw output ===\n", modifiedCode, "\n=== end ===");
+
+  
   // Check if the model refused due to a Constitution violation.
   // We told it to return "CONSTITUTION_VIOLATION" if the instruction
   // breaks the rules. This is our first check on the output.

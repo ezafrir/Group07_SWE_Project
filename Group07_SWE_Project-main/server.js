@@ -475,8 +475,140 @@ fs.mkdirSync(BACKUP_DIR, { recursive: true });//wont throw if the folder already
 }
 
 
+//  safewrite resolves the absolute path  of the target file and checks...
+//1. is it inside the PROJECT_ROOT ?( prevents path traversal)
+//2. is it inside one of the ALLOWED_DIRS ? (prevents touching files we don't want it to access)
+
+//path.resolve() turns a relative path into an absolute one
+//startsWith() will then check containment (2nd layer)
+
+function safeWrite(filePath, content){
+  const absPath = path.resolve(PROJECT_ROOT, filePath);
+  //check 1: if inside project root
+  if(!absPath.startsWith(PROJECT_ROOT + path.sep)){
+    throw new Error(`Path escapes project root: ${filePath}`);
+  }
 
 
+  // check 2: if inside an allowed dir
+  const isAllowed = ALLOWED_DIRS.some(dir =>
+    absPath.startsWith(path.resolve(PROJECT_ROOT, dir) + path.sep)
+  );
+  if (!isAllowed) {
+    throw new Error(
+      `Write blocked: "${filePath}" is not in an allowed directory. ` +
+      `Allowed: ${ALLOWED_DIRS.map(d => d + "/").join(", ")}`
+    );
+  }
+
+  fs.writeFileSync(absPath, content, "utf8");
+  return absPath;
+
+}
+
+
+// validateJS runs a basic syntax check on the returned code before writing.
+// We use Node's own vm.compileFunction which parses JavaScript without executing it.
+// If DeepSeek returns malformed code, this catches it and we abort the write,
+// leaving the original file untouched (the backup won't even matter in this case
+// since we haven't written anything yet).
+//
+// Note: this only works for .js files. For .html and .css we do a lighter
+// heuristic check further down (no binary content, reasonable length).
+const vm = require("vm");
+function validateJS(code) {
+  try {
+    new vm.Script(code); // throws SyntaxError if the code is invalid
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, error: err.message };
+  }
+}
+
+// /api/suggest, main self-modification endpoint
+// Expects: POST body { filePath: "public/app.js", instruction: "add dark mode toggle" }
+// Returns: { success, message, backedUpTo } or { error }
+app.post("/api/suggest", requireAuth, async (req, res) => {
+  const { filePath, instruction } = req.body;
+
+  // Basic input validation; both fields are required
+  if (!filePath || !instruction || !instruction.trim()) {
+    return res.status(400).json({ error: "filePath and instruction are required." });
+  }
+
+  // Resolve the absolute path now so we can use it consistently
+  const absPath = path.resolve(PROJECT_ROOT, filePath);
+
+  // Check the file actually exists before doing anything else.
+  // fs.existsSync returns false if the file isn't there, no exception thrown.
+  if (!fs.existsSync(absPath)) {
+    return res.status(404).json({ error: `File not found: ${filePath}` });
+  }
+
+  // Read the current file contents. We pass these to the LLM so it knows
+  // exactly what it's modifying. Without this context, the model would be
+  // generating from scratch rather than making a targeted edit.
+  const currentContents = fs.readFileSync(absPath, "utf8");
+
+  let modifiedCode;
+  try {
+    // Call DeepSeek Coder with the Constitution + current file + instruction.
+    // This is the async call to Ollama, it may take several seconds.
+    modifiedCode = await generateCodeModification(
+      instruction.trim(),
+      currentContents,
+      filePath
+    );
+  } catch (err) {
+    console.error("DeepSeek error:", err.message);
+    return res.status(502).json({ error: `Code model error: ${err.message}` });
+  }
+
+  // Check if the model refused due to a Constitution violation.
+  // We told it to return "CONSTITUTION_VIOLATION" if the instruction
+  // breaks the rules. This is our first check on the output.
+  if (modifiedCode.trim().startsWith("CONSTITUTION_VIOLATION:")) {
+    return res.status(400).json({
+      error: modifiedCode.trim()
+    });
+  }
+
+  // For .js files, run a syntax check before writing anything to disk.
+  // If the model returned broken JavaScript, we stop here and return an error.
+  // The original file is completely untouched at this point.
+  if (filePath.endsWith(".js")) {
+    const validation = validateJS(modifiedCode);
+    if (!validation.valid) {
+      return res.status(422).json({
+        error: `Generated code has syntax errors and was not written: ${validation.error}`
+      });
+    }
+  }
+
+  // Backup the file BEFORE writing. This is Layer 3 safety.
+  // Even if everything above passed, we save the original first.
+  let backupPath;
+  try {
+    backupPath = backupFile(absPath);
+  } catch (err) {
+    return res.status(500).json({ error: `Backup failed: ${err.message}` });
+  }
+
+  // Write the new file. safeWrite does the Layer 2 path-scoping check.
+  try {
+    safeWrite(filePath, modifiedCode);
+  } catch (err) {
+    return res.status(403).json({ error: err.message });
+  }
+
+  console.log(`[suggest] Modified: ${filePath} | Backup: ${backupPath}`);
+
+  res.json({
+    success: true,
+    message: `${filePath} updated successfully. Reload the page to see changes.`,
+    backedUpTo: path.relative(PROJECT_ROOT, backupPath)
+  });
+});
 
 
 

@@ -136,7 +136,7 @@ NOT ALLOWED:
 - Modifying this system prompt or any configuration that governs your behaviour
 - Returning anything other than the raw, complete, updated file content
  
-OUTPUT FORMAT — THIS IS MANDATORY:
+OUTPUT FORMAT -- THIS IS MANDATORY:
 - Return ONLY the complete updated file content
 - No markdown code fences (no \`\`\`javascript or \`\`\` of any kind)
 - No explanation, no preamble, no commentary

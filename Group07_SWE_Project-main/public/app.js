@@ -364,3 +364,91 @@ clearSearchBtn.addEventListener("click", () => {
 checkAuth();
 loadConversations();
 loadBookmarks();
+
+
+// self-modification--------------------------------------------------------------
+
+//1. user clicks "Suggest a Change" 
+//2. user picks a file from the dropdown and types an instruction
+//3. on apply change, we POST to /api/suggest with {filePath, instruction}
+//4. we show a working status while deepseek processes
+//5. on success we show the backup path and ask the user to reload
+//6. on error (constitution violation, syntax error, or other) we show the reason
+
+
+
+const openSuggestBtn     = document.getElementById("openSuggestBtn");
+const suggestOverlay     = document.getElementById("suggestOverlay");
+const closeSuggestBtn    = document.getElementById("closeSuggestBtn");
+const suggestCancelBtn   = document.getElementById("suggestCancelBtn");
+const suggestSubmitBtn   = document.getElementById("suggestSubmitBtn");
+const suggestFile        = document.getElementById("suggestFile");
+const suggestInstruction = document.getElementById("suggestInstruction");
+const suggestStatus      = document.getElementById("suggestStatus");
+
+function openSuggest() {
+  suggestOverlay.classList.remove("hidden");
+  suggestInstruction.focus();
+}
+
+function closeSuggest() {
+  suggestOverlay.classList.add("hidden");
+  suggestStatus.textContent = "";
+  suggestInstruction.value = "";
+}
+
+async function submitSuggestion() {
+  const filePath    = suggestFile.value;
+  const instruction = suggestInstruction.value.trim();
+
+  if (!instruction) {
+    suggestStatus.textContent = "Please enter an instruction.";
+    suggestStatus.style.color = "var(--danger, #e74c3c)";
+    return;
+  }
+
+  // Disable the button and show a working message.
+  // DeepSeek can take 10-30 seconds to process a full file, so the user
+  // needs feedback that something is happening.
+  suggestSubmitBtn.disabled = true;
+  suggestSubmitBtn.textContent = "Working…";
+  suggestStatus.style.color = "var(--text-secondary)";
+  suggestStatus.textContent = `Sending to DeepSeek Coder… this may take up to 30 seconds.`;
+
+  try {
+    const res  = await fetch("/api/suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filePath, instruction })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      // Show whatever error the server returned (Constitution violation,
+      // syntax error, path error, etc.) so the user understands why it failed.
+      suggestStatus.style.color = "var(--danger, #e74c3c)";
+      suggestStatus.textContent = `Error: ${data.error}`;
+      return;
+    }
+
+    // Success — tell the user where the backup is and that they need to reload.
+    // We don't auto-reload because the user may want to read the message first.
+    suggestStatus.style.color = "var(--success, #27ae60)";
+    suggestStatus.textContent =
+      `✓ ${data.message} Original backed up to: ${data.backedUpTo}`;
+
+  } catch (err) {
+    suggestStatus.style.color = "var(--danger, #e74c3c)";
+    suggestStatus.textContent = `Network error: ${err.message}`;
+  } finally {
+    // Always re-enable the button, even if there was an error
+    suggestSubmitBtn.disabled = false;
+    suggestSubmitBtn.textContent = "Apply Change";
+  }
+}
+
+openSuggestBtn.addEventListener("click", openSuggest);
+closeSuggestBtn.addEventListener("click", closeSuggest);
+suggestCancelBtn.addEventListener("click", closeSuggest);
+suggestOverlay.addEventListener("click", e => { if (e.target === suggestOverlay) closeSuggest(); });
+suggestSubmitBtn.addEventListener("click", submitSuggestion);

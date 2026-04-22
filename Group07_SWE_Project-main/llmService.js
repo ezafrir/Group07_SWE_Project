@@ -8,17 +8,34 @@
 //   2. Pull a model:   ollama pull llama3.2
 //   3. Start Ollama:   ollama serve   (runs at http://localhost:11434)
 //   4. Start this app: npm start
+// EXPORTS:
+//   generateLLMResponse(prompt)
+//     → Used for all normal chat. Routes to llama3.2.
 //
-// CHANGING THE MODEL:
-//   Edit OLLAMA_MODEL below to any model you have pulled.
-//   Run `ollama list` in your terminal to see available models.
-//
-// IF YOU WANT TO USE A REMOTE OLLAMA SERVER INSTEAD:
-//   Change OLLAMA_BASE_URL to your server's address, e.g.:
-//   const OLLAMA_BASE_URL = "http://my-server:11434";
+//   generateCodeModification(instruction, fileContents, filePath)
+//     → Used for self-modification requests. Routes to deepseek-coder
+//       with the Constitution as a system prompt.
 // ============================================================
+ 
+// ── Model configuration ───────────────────────────────────────────────────────
+// Both models run locally through Ollama — no API keys needed.
+//
+// CHAT MODEL (llama3.2):
+//   Used for all normal conversation responses. Fast and lightweight.
+//   Pull it with: ollama pull llama3.2
+//
+// CODE MODEL (deepseek-coder):
+//   Used exclusively for self-modification requests (/api/suggest).
+//   DeepSeek Coder is purpose-built for reading and writing code, which
+//   makes it significantly more reliable than a general model for that task.
+//   Pull it with: ollama pull deepseek-coder
+//
+// WHY TWO MODELS?
+//   A general chat model is optimised for conversation — it produces fluent,
+//   helpful prose. A code model is optimised for producing syntactically valid,
+//   structured output. Using the right tool for each job gives better results
+//   and keeps the chat model fast for everyday use.
 
-// CHANGED: Ollama configuration — no API key required
 const OLLAMA_BASE_URL = "http://localhost:11434"; // default Ollama address
 const OLLAMA_MODEL    = "llama3.2";               // change to any pulled model
 

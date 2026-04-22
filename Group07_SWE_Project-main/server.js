@@ -1,10 +1,16 @@
 
-
 const path = require("path");
+const fs   = require("fs");    // needed for the self-modification backup + write system
 const express = require("express");
 
 const session = require("express-session");
-const generateLLMResponse = require("./llmService");
+// llmService now exports two functions:
+//   generateLLMResponse: normal chat (llama3.2)
+//   generateCodeModification: file editing with Constitution (deepseek-coder)
+// they are here so the rest of the file can just call them by name
+
+
+const { generateLLMResponse, generateCodeModification } =  require("./llmService");
 
 const app = express();
 const PORT = 3000;
@@ -52,7 +58,9 @@ async function generateChatTitle(prompt) {
   }
 }
 
-// CHANGED: Now async — must await the Ollama API call inside generateLLMResponse
+
+
+
 async function createConversation(prompt, shorten, userId) {
   let response = await generateLLMResponse(prompt); // CHANGED: await added
 
@@ -81,14 +89,16 @@ async function createConversation(prompt, shorten, userId) {
   return conversation;
 }
 
-// CHANGED: Now async — must await the Ollama API call inside generateLLMResponse
+
+
+
 async function addMessageToConversation(id, prompt, shorten, userId) {
   const conversation = conversations.find(
     c => c.id === id && c.userId === userId
   );
   if (!conversation) return null;
 
-  let response = await generateLLMResponse(prompt); // CHANGED: await added
+  let response = await generateLLMResponse(prompt); 
   if (shorten) {
     response = shortenResponse(response, settings.responseLength);
   }
@@ -271,7 +281,6 @@ app.get("/api/conversations/:id", requireAuth, (req, res) => {
   res.json(conversation);
 });
 
-// CHANGED: Route handler is now async to await the Ollama response
 app.post("/api/conversations", requireAuth, async (req, res) => {
   const { prompt, shorten } = req.body;
 
@@ -279,7 +288,6 @@ app.post("/api/conversations", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Prompt is required." });
   }
 
-  // CHANGED: try/catch added to handle Ollama errors gracefully
   try {
     const conversation = await createConversation( // CHANGED: await added
       prompt.trim(),

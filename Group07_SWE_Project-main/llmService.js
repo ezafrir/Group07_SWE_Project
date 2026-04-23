@@ -1,3 +1,6 @@
+
+const fetch = require("node-fetch");
+
 // ============================================================
 // llmService.js — CHANGED: Replaced hardcoded fake responses
 //                 with real Ollama API calls.
@@ -36,9 +39,9 @@
 //   structured output. Using the right tool for each job gives better results
 //   and keeps the chat model fast for everyday use.
 
-const OLLAMA_BASE_URL = "http://localhost:11434"; // default Ollama address
+const OLLAMA_BASE_URL = "http://127.0.0.1:11434"; // default Ollama address
 const CHAT_MODEL    = "llama3.2:latest";               // normal conversations
-const CODE_MODEL = "deepseek-coder:6.7b"; //for self-modification           // code modification requests
+const CODE_MODEL = "deepseek-coder:latest"; //for self-modification  - 1.3b
 // Core fetch helper::::
 // Both exported functions below share this helper to avoid repeating the same fetch/error-handling logic.
 // The DRY principle from class!!!
@@ -48,6 +51,7 @@ const CODE_MODEL = "deepseek-coder:6.7b"; //for self-modification           // c
 // this is to hopefully avoid accidental (hopefully not purposeful) prompt injections!!!!
 
 async function callOllama(model, userPrompt, systemPrompt = null) {
+
   const messages = [];
  
   // If a system prompt exists, prepend it as a "system" role message.
@@ -66,26 +70,41 @@ async function callOllama(model, userPrompt, systemPrompt = null) {
   messages,
   stream: false,
   options: {
-    num_predict: 8192,   // max tokens to generate, increase this for long files
-    temperature: 0.2     // lower = more conservative, less creative, better for code
+    options: {
+      num_predict: 1024,
+      temperature: 0.1,  // as deterministic as possible
+      num_ctx: 4096      // limit context window
+}
   }
 };
  
+
+
+  console.log("About to fetch, requestBody size =", JSON.stringify(requestBody).length, "chars"); //debug
+
+
+
+
   let response;
-  try {
+
+  
+  
+   try {
     response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody)
     });
   } catch (err) {
+    console.error("Full error object:", err);
     throw new Error(
       `Could not reach Ollama at ${OLLAMA_BASE_URL}. ` +
       `Make sure Ollama is installed and running ("ollama serve"). ` +
       `Original error: ${err.message}`
     );
   }
- 
+
+
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
@@ -129,9 +148,9 @@ YOUR ONLY JOB:
 You receive a file and an instruction. You return a search-and-replace block.
 Nothing else. No exceptions.
 
-OUTPUT FORMAT — MANDATORY. FOLLOW THIS EXACTLY:
+OUTPUT FORMAT -- MANDATORY. FOLLOW THIS EXACTLY:
 <<<FIND>>>
-(copy the exact lines from the file that need to change — verbatim, character for character)
+(copy the exact lines from the file that need to change - verbatim, character for character)
 <<<REPLACE>>>
 (the new lines that replace them)
 <<<END>>>
@@ -160,15 +179,18 @@ CONSTITUTION_VIOLATION:  Your instruction violates the rules of this system and 
 
 
 async function generateCodeModification(instruction, fileContents, filePath) {
-  // We embed both the file path and the full current source into the user
-  // message. This gives the model full context: it knows which file it is
-  // editing and exactly what the code looks like right now.
+  const trimmedContents = fileContents
+    .split("\n")
+    .slice(0, 100)
+    .join("\n");
+
   const userPrompt =
-    `File to modify: ${filePath}\n\n` +
-    `Current file contents:\n${fileContents}\n\n` +
+    `File: ${filePath}\n\n` +
+    `File start:\n${trimmedContents}\n\n` +
     `Instruction: ${instruction}`;
- 
+
   return callOllama(CODE_MODEL, userPrompt, CONSTITUTION);
 }
+
  
 module.exports = { generateLLMResponse, generateCodeModification };

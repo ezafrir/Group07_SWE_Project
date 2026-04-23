@@ -413,7 +413,7 @@ async function submitSuggestion() {
   suggestSubmitBtn.disabled = true;
   suggestSubmitBtn.textContent = "Working…";
   suggestStatus.style.color = "var(--text-secondary)";
-  suggestStatus.textContent = `Sending to DeepSeek Coder… this may take up to 30 seconds.`;
+  suggestStatus.textContent = `Sending to DeepSeek Coder… this may take up to 5 minutes.`;
 
   try {
     const res  = await fetch("/api/suggest", {

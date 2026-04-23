@@ -525,6 +525,36 @@ function validateJS(code) {
   }
 }
 
+function applyDiff(originalContent, diffOutput) {
+  const findMatch    = diffOutput.match(/<<<FIND>>>([\s\S]*?)<<<REPLACE>>>/);
+  const replaceMatch = diffOutput.match(/<<<REPLACE>>>([\s\S]*?)<<<END>>>/);
+
+  if (!findMatch || !replaceMatch) {
+    throw new Error(
+      "Model did not return a valid diff block. " +
+      "Raw output: " + diffOutput.slice(0, 200)
+    );
+  }
+
+  const findText    = findMatch[1];
+  const replaceText = replaceMatch[1];
+
+  // Empty FIND = prepend to top of file
+  if (findText.trim() === "") {
+    return replaceText + originalContent;
+  }
+
+  if (!originalContent.includes(findText)) {
+    throw new Error(
+      "Could not find the target text in the file. " +
+      "The model may have hallucinated lines that don't exist."
+    );
+  }
+
+  return originalContent.replace(findText, replaceText);
+}
+
+
 // /api/suggest, main self-modification endpoint
 // Expects: POST body { filePath: "public/app.js", instruction: "add dark mode toggle" }
 // Returns: { success, message, backedUpTo } or { error }
@@ -568,7 +598,7 @@ app.post("/api/suggest", requireAuth, async (req, res) => {
   //debug!!!
   console.log("=== DeepSeek raw output ===\n", modifiedCode, "\n=== end ===");
 
-  
+
   // Check if the model refused due to a Constitution violation.
   // We told it to return "CONSTITUTION_VIOLATION" if the instruction
   // breaks the rules. This is our first check on the output.
@@ -578,20 +608,29 @@ app.post("/api/suggest", requireAuth, async (req, res) => {
     });
   }
 
-  // For .js files, run a syntax check before writing anything to disk.
-  // If the model returned broken JavaScript, we stop here and return an error.
-  // The original file is completely untouched at this point.
+  // Apply the diff block the model returned to the original file content.
+  // applyDiff() parses <<<FIND>>><<<REPLACE>>><<<END>>> and does the swap.
+  // This happens BEFORE backup — if the diff is malformed we abort immediately
+  // and nothing on disk is touched at all.
+  let finalContent;
+  try {
+    finalContent = applyDiff(currentContents, modifiedCode);
+  } catch (err) {
+    return res.status(422).json({ error: `Diff error: ${err.message}` });
+  }
+
+  // For .js files, validate the patched result before writing anything to disk.
+  // We validate finalContent (the patched file) not modifiedCode (the diff block).
   if (filePath.endsWith(".js")) {
-    const validation = validateJS(modifiedCode);
+    const validation = validateJS(finalContent);
     if (!validation.valid) {
       return res.status(422).json({
-        error: `Generated code has syntax errors and was not written: ${validation.error}`
+        error: `Result has syntax errors and was not written: ${validation.error}`
       });
     }
   }
 
   // Backup the file BEFORE writing. This is Layer 3 safety.
-  // Even if everything above passed, we save the original first.
   let backupPath;
   try {
     backupPath = backupFile(absPath);
@@ -599,9 +638,9 @@ app.post("/api/suggest", requireAuth, async (req, res) => {
     return res.status(500).json({ error: `Backup failed: ${err.message}` });
   }
 
-  // Write the new file. safeWrite does the Layer 2 path-scoping check.
+  // Write the patched file. safeWrite does the Layer 2 path-scoping check.
   try {
-    safeWrite(filePath, modifiedCode);
+    safeWrite(filePath, finalContent);
   } catch (err) {
     return res.status(403).json({ error: err.message });
   }

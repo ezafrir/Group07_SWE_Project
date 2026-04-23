@@ -18,6 +18,11 @@
 //   const OLLAMA_BASE_URL = "http://my-server:11434";
 // ============================================================
 
+
+
+
+
+/*
 // CHANGED: Ollama configuration — no API key required
 const OLLAMA_BASE_URL = "http://localhost:11434"; // default Ollama address
 const OLLAMA_MODEL    = "llama3.2";               // change to any pulled model
@@ -71,6 +76,50 @@ async function generateLLMResponse(prompt) {
   // CHANGED: Parse the JSON and extract the assistant's reply
   const data = await response.json();
   return data.message.content; // Ollama chat response structure
+}
+
+module.exports = generateLLMResponse;
+
+
+
+
+
+*/
+
+
+
+
+
+
+// llmService.js additions
+// Replaced hardcoded OLLAMA_MODEL to accept dynamic models
+
+async function generateLLMResponse(prompt, modelName = "llama3.2", systemRole = "You are a helpful AI assistant.") {
+  const requestBody = {
+    model: modelName, 
+    messages: [
+      { role: "system", content: systemRole },
+      { role: "user", content: prompt }
+    ],
+    stream: false 
+  };
+
+  try {
+    const response = await fetch("http://localhost:11434/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Model "${modelName}" failed. Make sure it is pulled in Ollama.`);
+    }
+
+    const data = await response.json();
+    return data.message.content;
+  } catch (err) {
+    throw new Error(err.message);
+  }
 }
 
 module.exports = generateLLMResponse;

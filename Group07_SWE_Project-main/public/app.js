@@ -338,6 +338,77 @@ newChatBtn.addEventListener("click", () => {
   loadConversations();
 });
 
+// ─── ITERATION: Compare 3 LLMs ────────────────────────────────────────────────
+async function runComparison() {
+  const prompt = promptInput.value.trim();
+  if (!prompt) return;
+  if (isSending) return;
+
+  isSending = true;
+  promptInput.value = "";
+  
+  // Reuse your existing loading bubble functions
+  showUserBubble(prompt);
+  showLoadingBubble();
+  
+  try {
+    const res = await fetch("/api/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+
+    hideLoadingBubble();
+
+    if (!res.ok) { 
+      alert(data.error || "Comparison failed"); 
+      return; 
+    }
+
+    renderComparison(data);
+  } catch (err) {
+    hideLoadingBubble();
+    alert("Network error during comparison");
+  } finally {
+    isSending = false;
+  }
+}
+
+function renderComparison(data) {
+  // Clear thread out if needed or just append. 
+  // We'll hide the standard actions since this is a special view
+  threadSection.style.display = "block";
+  threadTitle.textContent = "Comparing 3 Models...";
+  threadBookmarkBtn.style.display = "none";
+  threadUnbookmarkBtn.style.display = "none";
+  threadDeleteBtn.style.display = "none";
+
+  // Render the 3 distinct model responses
+  data.responses.forEach((resp) => {
+    const div = document.createElement("div");
+    div.className = "message-bubble assistant-bubble";
+    div.innerHTML = `
+      <span class="bubble-label">${escapeHtml(resp.model)}</span>
+      <p>${escapeHtml(resp.text)}</p>
+    `;
+    threadMessages.appendChild(div);
+  });
+
+  // Render the comparison summary
+  const summaryDiv = document.createElement("div");
+  summaryDiv.className = "message-bubble"; 
+  summaryDiv.style.border = "2px solid var(--nut-color)";
+  summaryDiv.style.backgroundColor = "var(--shell-inner)";
+  summaryDiv.innerHTML = `
+    <span class="bubble-label">Similarities & Differences</span>
+    <p>${escapeHtml(data.comparison)}</p>
+  `;
+  threadMessages.appendChild(summaryDiv);
+  
+  scrollToBottom();
+}
+
 // ─── Event listeners ──────────────────────────────────────────────────────────
 sendBtn.addEventListener("click", sendPrompt);
 promptInput.addEventListener("keydown", e => { if (e.key === "Enter") sendPrompt(); });
@@ -359,6 +430,9 @@ clearSearchBtn.addEventListener("click", () => {
   searchInput.value = "";
   searchResults.innerHTML = "";
 });
+
+
+
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 checkAuth();

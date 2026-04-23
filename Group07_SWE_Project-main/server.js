@@ -610,7 +610,7 @@ app.post("/api/suggest", requireAuth, async (req, res) => {
 
   // Apply the diff block the model returned to the original file content.
   // applyDiff() parses <<<FIND>>><<<REPLACE>>><<<END>>> and does the swap.
-  // This happens BEFORE backup — if the diff is malformed we abort immediately
+  // This happens BEFORE backup. if the diff is malformed we abort immediately
   // and nothing on disk is touched at all.
   let finalContent;
   try {

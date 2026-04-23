@@ -446,7 +446,7 @@ async function submitSuggestion() {
     suggestSubmitBtn.textContent = "Apply Change";
   }
 }
-
+/
 openSuggestBtn.addEventListener("click", openSuggest);
 closeSuggestBtn.addEventListener("click", closeSuggest);
 suggestCancelBtn.addEventListener("click", closeSuggest);

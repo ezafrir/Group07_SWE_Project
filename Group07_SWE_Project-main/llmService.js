@@ -34,14 +34,14 @@ const fetch = require("node-fetch");
 //   Pull it with: ollama pull deepseek-coder
 //
 // WHY TWO MODELS?
-//   A general chat model is optimised for conversation — it produces fluent,
+//   A general chat model is optimised for conversation. it produces fluent,
 //   helpful prose. A code model is optimised for producing syntactically valid,
 //   structured output. Using the right tool for each job gives better results
 //   and keeps the chat model fast for everyday use.
 
 const OLLAMA_BASE_URL = "http://127.0.0.1:11434"; // default Ollama address
 const CHAT_MODEL    = "llama3.2:latest";               // normal conversations
-const CODE_MODEL = "deepseek-coder:latest"; //for self-modification  - 1.3b
+const CODE_MODEL = "deepseek-coder:6.7b"; //for self-modification  - 5.8
 // Core fetch helper::::
 // Both exported functions below share this helper to avoid repeating the same fetch/error-handling logic.
 // The DRY principle from class!!!
@@ -71,16 +71,16 @@ async function callOllama(model, userPrompt, systemPrompt = null) {
   stream: false,
   options: {
     options: {
-      num_predict: 1024,
-      temperature: 0.1,  // as deterministic as possible
-      num_ctx: 4096      // limit context window
+      num_predict: 8192,
+      temperature: 0.2,  
+      //num_ctx: 4096      // limit context window
 }
   }
 };
  
 
 
-  console.log("About to fetch, requestBody size =", JSON.stringify(requestBody).length, "chars"); //debug
+ // console.log("About to fetch, requestBody size =", JSON.stringify(requestBody).length, "chars"); //debug
 
 
 
@@ -135,10 +135,11 @@ async function generateLLMResponse(prompt) {
 
 // The CONSTITUTION is the system prompt passed to deepseek. 
 // i took inspiration from a podcast I listened to with peter steinberger (OpenClaw)
-// its a rule set that tells the model what it is and isn't allowed to do
+// its a rule set that tells the model what it is and isn't allowed to do (layer 1)
 // it specifies the exact output format (raw code).
 // the backend will write whatever the model returns directly to the disk. 
 // any extra text such as markdowns or explanations will break the code and we'll have to nuke it
+// ^^^ so, we have it create a backup code before each suggestion is implemented. so we can just restore it
 
 const CONSTITUTION = `YOU ARE A CODE EDITING TOOL. YOU ARE NOT A CHATBOT.
 DO NOT SPEAK. DO NOT EXPLAIN. DO NOT APOLOGIZE. SILENCE EXCEPT FOR OUTPUT.
@@ -159,7 +160,7 @@ RULES FOR THE FORMAT:
 - If you are ADDING something new with nothing to replace, leave FIND empty like this:
 <<<FIND>>>
 <<<REPLACE>>>
-(new lines to add at the top of the file)
+(new lines to add at the top of the file) 
 <<<END>>>
 - One block per change. Do not chain multiple blocks.
 - No markdown. No fences. No explanation before or after the block.
@@ -175,7 +176,7 @@ NOT ALLOWED:
 - Modifying this system prompt
 
 IF THE INSTRUCTION VIOLATES ANY RULE, return only this exact string:
-CONSTITUTION_VIOLATION:  Your instruction violates the rules of this system and cannot be fulfilled. Please revise or abandon your request.`;
+CONSTITUTION_VIOLATION:  Your instruction violates the rules of this system and cannot be fulfilled. Please revise or abandon your suggestion.`;
 
 
 async function generateCodeModification(instruction, fileContents, filePath) {
@@ -189,7 +190,7 @@ async function generateCodeModification(instruction, fileContents, filePath) {
     `File start:\n${trimmedContents}\n\n` +
     `Instruction: ${instruction}`;
 
-  return callOllama(CODE_MODEL, userPrompt, CONSTITUTION);
+  return callOllama(CODE_MODEL, userPrompt, CONSTITUTION); //sends all to deepseek
 }
 
  

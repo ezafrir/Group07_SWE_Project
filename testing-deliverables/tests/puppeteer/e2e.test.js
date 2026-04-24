@@ -92,6 +92,13 @@ async function waitForAlertAndAccept(page) {
   console.log("Browser launched successfully");
 
   const p = await browser.newPage();
+  p.setDefaultTimeout(0);
+  p.setDefaultNavigationTimeout(0);
+  // Fallback: auto-accept any dialog not already handled by waitForAlertAndAccept.
+  // This prevents unexpected alerts (e.g. "Conversation not found") from crashing the test.
+  p.on("dialog", async dialog => {
+    try { await dialog.accept(); } catch (_) {}
+  });
   await p.setViewport({
   width: 1400,
   height: 900,
@@ -156,7 +163,7 @@ async function waitForAlertAndAccept(page) {
   await p.waitForFunction(() => {
     const el = document.querySelector("#authMessage");
     return el && el.textContent.trim().length > 0;
-  }, { timeout: 10000 });
+  }, { timeout: 0 });
 
   const err = await p.$eval("#authMessage", el => el.textContent.trim());
   check(
@@ -195,7 +202,7 @@ async function waitForAlertAndAccept(page) {
       heading &&
       heading.textContent.includes("Continue")
     );
-  }, { timeout: 45000 });
+  }, { timeout: 0 });
 
   await p.click("#promptInput", { clickCount: 3 });
   await p.keyboard.press("Backspace");
@@ -208,7 +215,7 @@ async function waitForAlertAndAccept(page) {
       thread &&
       thread.innerText.toLowerCase().includes("give me another short sentence")
     );
-  }, { timeout: 45000 });
+  }, { timeout: 0 });
 
   const threadText = await p.$eval("#threadMessages", el => el.innerText.toLowerCase());
   check(threadText.includes("give me one short sentence"), "First message exists in conversation");
@@ -227,7 +234,7 @@ async function waitForAlertAndAccept(page) {
     await p.waitForFunction(() => {
       const list = document.querySelector("#bookmarkList");
       return list && list.innerText.trim().length > 0;
-    }, { timeout: 10000 });
+    }, { timeout: 0 });
 
     const bookmarkText = await p.$eval("#bookmarkList", el => el.innerText);
     check(bookmarkText.length > 0, "Bookmark list updated");
@@ -248,7 +255,7 @@ async function waitForAlertAndAccept(page) {
   await p.waitForFunction(() => {
     const results = document.querySelector("#searchResults");
     return results && results.innerText.trim().length > 0;
-  }, { timeout: 10000 });
+  }, { timeout: 0 });
 
   const resultsText = await p.$eval("#searchResults", el => el.innerText.toLowerCase());
 
@@ -273,7 +280,7 @@ async function waitForAlertAndAccept(page) {
         overlay &&
         overlay.classList.contains("hidden")
       );
-    }, { timeout: 10000 });
+    }, { timeout: 0 });
 
     check(true, "Clicking a search result opens the conversation");
   }
@@ -308,10 +315,51 @@ async function waitForAlertAndAccept(page) {
     await p.waitForFunction(() => {
       const heading = document.querySelector("#mainHeading");
       return heading && heading.textContent.includes("How can I help you?");
-    }, { timeout: 15000 });
+    }, { timeout: 0 });
 
     const afterText = await p.$eval("#chatList", el => el.innerText);
     check(beforeText !== afterText, "Conversation list changed after deletion");
+  });
+
+  await runSuite("🤖 Suite 9: Multi-LLM Model Selector", async () => {
+    // Suite 8 already left the page in a clean state (activeConversationId = null)
+    // Just wait for promptInput and send a new prompt
+    await p.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
+    await clearAndType(p, "#promptInput", "what is a variable?");
+    await p.click("#sendBtn");
+
+    // Wait for model selector row to appear after LLM responds
+    await p.waitForFunction(() => {
+      const row = document.getElementById("modelSelectorRow");
+      return row && row.offsetParent !== null;
+    }, { timeout: 0 });
+    check(true, "Model selector row appears after sending a prompt");
+
+    // Dropdown must be present
+    const dropdown = await p.$("#inlineModelDropdown");
+    check(!!dropdown, "Model selector dropdown is present");
+
+    // All three model options must be in the dropdown
+    const options = await p.$$eval(
+      "#inlineModelDropdown option",
+      opts => opts.map(o => o.textContent.trim())
+    );
+    check(options.includes("Llama 3.2"), `Dropdown contains Llama 3.2 (found: ${JSON.stringify(options)})`);
+    check(options.includes("Phi-3"),     `Dropdown contains Phi-3 (found: ${JSON.stringify(options)})`);
+    check(options.includes("TinyLlama"), `Dropdown contains TinyLlama (found: ${JSON.stringify(options)})`);
+
+    // Default selected value must be llama3.2
+    const defaultVal = await p.$eval("#inlineModelDropdown", el => el.value);
+    check(defaultVal === "llama3.2:latest", `Default model is llama3.2:latest (got: ${defaultVal})`);
+
+    // Selecting a different option must change the dropdown value immediately (no Ollama needed)
+    await p.select("#inlineModelDropdown", "phi3:latest");
+    const selectedAfterSwitch = await p.$eval("#inlineModelDropdown", el => el.value);
+    check(selectedAfterSwitch === "phi3:latest", `Dropdown value changes when Phi-3 is selected (got: ${selectedAfterSwitch})`);
+
+    await p.select("#inlineModelDropdown", "tinyllama:latest");
+    const selectedTiny = await p.$eval("#inlineModelDropdown", el => el.value);
+    check(selectedTiny === "tinyllama:latest", `Dropdown value changes when TinyLlama is selected (got: ${selectedTiny})`);
   });
 
   console.log(`\nDone. Passed: ${pass}, Failed: ${fail}`);

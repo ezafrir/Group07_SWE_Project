@@ -1,0 +1,31 @@
+{
+  "name": "llm-prototype",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "jasmine",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "express": "^5.2.1",
+    "express-session": "^1.19.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "globals": "^17.4.0",
+    "jasmine": "^6.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "_comments": {
+    "CHANGED": "Added engines field — Node 18+ is required because llmService.js uses the built-in fetch API (available since Node 18). No extra npm packages are needed for Ollama. If you are on Node 17 or older, either upgrade Node or run: npm install node-fetch and update llmService.js to: const fetch = require('node-fetch');"
+  }
+}

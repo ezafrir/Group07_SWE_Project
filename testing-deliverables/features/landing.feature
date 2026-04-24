@@ -5,7 +5,7 @@ Feature: Landing Page
 
   Scenario: Visitor sees the landing page
     Given I navigate to the home page
-    Then I should see the heading "LLM Web Interface"
+    Then I should see the heading "Think greener."
     And I should see a signup form
     And I should see a login form
 

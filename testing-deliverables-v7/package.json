@@ -1,0 +1,35 @@
+{
+  "name": "llm-prototype-tests",
+  "version": "1.0.0",
+  "description": "Testing team deliverables — Cucumber acceptance tests and Puppeteer E2E",
+  "scripts": {
+    "test:unit": "cd .. && npx jasmine",
+    "lint": "eslint .",
+    "test:cucumber": "cucumber-js",
+    "test:e2e": "node tests/puppeteer/e2e.test.js",
+    "test:all": "npm run test:cucumber && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^10.0.0",
+    "eslint": "^8.57.0"
+  },
+  "dependencies": {
+    "puppeteer-core": "^24.40.0"
+  },
+  "eslintConfig": {
+    "env": {
+      "node": true,
+      "browser": true,
+      "es2021": true,
+      "jest": true
+    },
+    "extends": "eslint:recommended",
+    "parserOptions": {
+      "ecmaVersion": 2021
+    },
+    "rules": {
+      "no-unused-vars": "off",
+      "no-empty": "off"
+    }
+  }
+}

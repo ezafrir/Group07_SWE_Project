@@ -10,6 +10,7 @@ const express = require("express");
 
 const session = require("express-session");
 const generateLLMResponse = require("./llmService");
+const { generateMultiLLMResponses } = generateLLMResponse;
 
 const app = express();
 const PORT = 3000;
@@ -78,6 +79,7 @@ async function createConversation(prompt, shorten, userId) {
       { role: "assistant", content: response }
     ],
     bookmarked: false,
+    multiResponses: null, // MULTI-LLM: populated on demand via /multi-response endpoint
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -276,6 +278,35 @@ app.get("/api/conversations/:id", requireAuth, (req, res) => {
   res.json(conversation);
 });
 
+// MULTI-LLM: Returns responses from all three models for the latest prompt
+// in a conversation. Results are cached on the conversation object so that
+// repeated requests don't re-query Ollama unnecessarily.
+app.get("/api/conversations/:id/multi-response", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+
+  const conversation = conversations.find(
+    c => c.id === id && c.userId === req.session.user.id
+  );
+
+  if (!conversation) {
+    return res.status(404).json({ error: "Conversation not found." });
+  }
+
+  // Use cached results if already fetched for this conversation
+  if (conversation.multiResponses) {
+    return res.json({ multiResponses: conversation.multiResponses });
+  }
+
+  try {
+    const multiResponses = await generateMultiLLMResponses(conversation.prompt);
+    conversation.multiResponses = multiResponses; // cache on the conversation
+    res.json({ multiResponses });
+  } catch (err) {
+    console.error("Multi-LLM error:", err.message);
+    res.status(502).json({ error: `Multi-LLM service error: ${err.message}` });
+  }
+});
+
 // CHANGED: Route handler is now async to await the Ollama response
 app.post("/api/conversations", requireAuth, async (req, res) => {
   const { prompt, shorten } = req.body;
@@ -441,5 +472,6 @@ module.exports = {
   addMessageToConversation,
   bookmarkConversation,
   unbookmarkConversation,
-  deleteConversationById
+  deleteConversationById,
+  generateMultiLLMResponses // MULTI-LLM: exported for unit tests
 };

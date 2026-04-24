@@ -27,6 +27,10 @@ const searchBtn        = document.getElementById("searchBtn");
 const clearSearchBtn   = document.getElementById("clearSearchBtn");
 const searchResults    = document.getElementById("searchResults");
 
+// ─── Multi-LLM refs ───────────────────────────────────────────────────────────
+// Cached multi-responses keyed by conversationId so switching convos works
+const multiResponseCache = {};
+
 // ─── State ───────────────────────────────────────────────────────────────────
 let activeConversationId = null;
 
@@ -223,15 +227,31 @@ function renderThread(conversation) {
         { role: "assistant", content: conversation.response  }
        ];
 
-  messages.forEach(msg => {
+  // Find the index of the last assistant message
+  let lastAssistantIdx = -1;
+  messages.forEach((msg, idx) => { if (msg.role === "assistant") lastAssistantIdx = idx; });
+
+  messages.forEach((msg, idx) => {
     const bubble = document.createElement("div");
     bubble.className = `message-bubble ${msg.role === "user" ? "user-bubble" : "assistant-bubble"}`;
-    bubble.innerHTML = `
-      <span class="bubble-label">${msg.role === "user" ? "You" : "PistachioAI"}</span>
-      <p>${escapeHtml(msg.content)}</p>
-    `;
+
+    // Tag the last assistant bubble so the dropdown can find and update it
+    if (idx === lastAssistantIdx) bubble.id = "lastAssistantBubble";
+
+    const label = document.createElement("span");
+    label.className = "bubble-label";
+    label.textContent = msg.role === "user" ? "You" : "PistachioAI";
+
+    const body = document.createElement("p");
+    body.textContent = msg.content;
+
+    bubble.appendChild(label);
+    bubble.appendChild(body);
     threadMessages.appendChild(bubble);
   });
+
+  // Inject the inline model-selector widget after the last assistant bubble
+  appendModelSelector(conversation.id);
 
   scrollToBottom();
 
@@ -239,6 +259,96 @@ function renderThread(conversation) {
   mainHeading.textContent = "Continue your conversation…";
 
   loadConversations();
+}
+
+// Build and insert the inline model-selector row + fetches responses in background
+function appendModelSelector(convId) {
+  // Remove any existing selector from a previous render
+  const old = document.getElementById("modelSelectorRow");
+  if (old) old.remove();
+
+  const row = document.createElement("div");
+  row.id = "modelSelectorRow";
+  row.className = "model-selector-row";
+
+  const label = document.createElement("span");
+  label.className = "model-selector-label";
+  label.textContent = "View response from:";
+
+  const dropdown = document.createElement("select");
+  dropdown.className = "model-dropdown";
+  dropdown.id = "inlineModelDropdown";
+  [
+    { value: "llama3.2:latest", text: "Llama 3.2" },
+    { value: "phi3:latest",     text: "Phi-3"     },
+    { value: "tinyllama:latest", text: "TinyLlama" }
+  ].forEach(({ value, text }) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = text;
+    dropdown.appendChild(opt);
+  });
+  dropdown.value = "llama3.2:latest"; // default — matches the existing Ollama model
+
+  const loadingIndicator = document.createElement("span");
+  loadingIndicator.className = "model-loading-indicator hidden";
+  loadingIndicator.id = "modelLoadingIndicator";
+  loadingIndicator.textContent = "⏳ Fetching other models…";
+
+  row.appendChild(label);
+  row.appendChild(dropdown);
+  row.appendChild(loadingIndicator);
+  threadMessages.appendChild(row);
+
+  // Helper: swap the last assistant bubble's content
+  function swapBubble(modelLabel, text) {
+    const bubble = document.getElementById("lastAssistantBubble");
+    if (!bubble) return;
+    bubble.querySelector(".bubble-label").textContent = modelLabel;
+    bubble.querySelector("p").textContent = text;
+  }
+
+  // Pre-fetch all three model responses in the background and cache them
+  if (!multiResponseCache[convId]) {
+    loadingIndicator.classList.remove("hidden");
+    fetch(`/api/conversations/${convId}/multi-response`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.multiResponses) {
+          multiResponseCache[convId] = data.multiResponses;
+          // If the user already selected a model while it was loading, apply now
+          const current = dropdown.value;
+          if (current) {
+            const entry = data.multiResponses.find(r => r.modelId === current);
+            if (entry) swapBubble(entry.label, entry.error ? `(Model unavailable: ${entry.error})` : entry.response);
+          }
+        }
+      })
+      .catch(() => {
+        loadingIndicator.textContent = "⚠ Models unavailable (is Ollama running?)";
+        loadingIndicator.classList.remove("hidden");
+      })
+      .finally(() => {
+        if (!loadingIndicator.textContent.startsWith("⚠")) {
+          loadingIndicator.classList.add("hidden");
+        }
+      });
+  }
+
+  dropdown.addEventListener("change", () => {
+    const selectedId = dropdown.value;
+    const cached = multiResponseCache[convId];
+
+    if (!cached) {
+      // Still loading — indicator is already showing, swap will happen when fetch resolves
+      loadingIndicator.classList.remove("hidden");
+      return;
+    }
+
+    const entry = cached.find(r => r.modelId === selectedId);
+    if (!entry) return;
+    swapBubble(entry.label, entry.error ? `(Model unavailable: ${entry.error})` : entry.response);
+  });
 }
 
 // ─── UC2: Open a previous conversation ───────────────────────────────────────

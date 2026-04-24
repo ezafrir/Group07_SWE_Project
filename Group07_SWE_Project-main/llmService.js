@@ -19,8 +19,74 @@
 // ============================================================
 
 // CHANGED: Ollama configuration — no API key required
-const OLLAMA_BASE_URL = "http://localhost:11434"; // default Ollama address
+const OLLAMA_BASE_URL = "http://127.0.0.1:11434"; // default Ollama address
 const OLLAMA_MODEL    = "llama3.2";               // change to any pulled model
+
+// MULTI-LLM: The three models used for individual iteration feature
+const MULTI_LLM_MODELS = [
+  { id: "llama3.2:latest", label: "Llama 3.2" },
+  { id: "phi3:latest",     label: "Phi-3"     },
+  { id: "gemma3:latest",   label: "Gemma 3"   }
+];
+
+// MULTI-LLM: Calls a single model by name and returns its text response.
+//            Exported for unit-testing individual model calls.
+async function generateResponseFromModel(prompt, modelId) {
+  const requestBody = {
+    model: modelId,
+    messages: [{ role: "user", content: prompt }],
+    stream: false
+  };
+
+  let response;
+  try {
+    response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody)
+    });
+  } catch (err) {
+    throw new Error(
+      `Could not reach Ollama at ${OLLAMA_BASE_URL} for model "${modelId}". ` +
+      `Make sure Ollama is installed and running ("ollama serve"). ` +
+      `Original error: ${err.message}`
+    );
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Ollama returned HTTP ${response.status} for model "${modelId}": ${errorText}. ` +
+      `Check that the model is pulled (run: ollama pull ${modelId}).`
+    );
+  }
+
+  const data = await response.json();
+  return data.message.content;
+}
+
+// MULTI-LLM: Calls all three models in parallel and returns an array of
+//            { modelId, label, response, error } objects — one per model.
+//            A failed model sets error instead of response so the other
+//            results are still returned to the client.
+async function generateMultiLLMResponses(prompt) {
+  const results = await Promise.allSettled(
+    MULTI_LLM_MODELS.map(async ({ id, label }) => {
+      const text = await generateResponseFromModel(prompt, id);
+      return { modelId: id, label, response: text, error: null };
+    })
+  );
+
+  return results.map((result, i) => {
+    if (result.status === "fulfilled") return result.value;
+    return {
+      modelId: MULTI_LLM_MODELS[i].id,
+      label:   MULTI_LLM_MODELS[i].label,
+      response: null,
+      error:   result.reason.message
+    };
+  });
+}
 
 // CHANGED: Function is now async because it calls the Ollama API
 async function generateLLMResponse(prompt) {
@@ -74,3 +140,6 @@ async function generateLLMResponse(prompt) {
 }
 
 module.exports = generateLLMResponse;
+module.exports.generateResponseFromModel  = generateResponseFromModel;
+module.exports.generateMultiLLMResponses  = generateMultiLLMResponses;
+module.exports.MULTI_LLM_MODELS           = MULTI_LLM_MODELS;

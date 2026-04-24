@@ -1,68 +1,71 @@
-## LLM Web Interface Prototype
-SOFTWARE ENGINEERING | (14:332:452) Section 01 | [17380] at Rutgers University-New Brunswick
+# LLM Prototype — Group 07
 
-**Authors:** Pravalika Chintakindi, Siddhartha Tamma, Ruchi Kapse, Emma Zafrir, Srinidhi Ganeshan, Eileen Rashduni
+## Setup
 
-## Project Description
-This project is a web-based interface for interacting with a simulated LLM. Users can create accounts, log in, submit prompts, and receive generated responses. Conversations can be saved, bookmarked, searched, and revisited later.
+```bash
+npm install
+npm start
+```
 
-## Features
-- User account creation (signup)
-- User login and logout
-- Prompt submission to simulated LLM
-- Generated responses to prompts
-- Conversation history
-- Bookmark conversations
-- Remove bookmarks
-- Search conversations
-- Adjustable response length settings
+Open http://localhost:3000
 
-## Technologies Used
-Frontend
-- HTML
-- CSS
-- JavaScript
-Backend
-- Node.js
-- Express.js
-- Express Session
-Testing
-- Jasmine (unit testing)
-Other Tools
-- GitHub
-- Git
+---
 
-## How to Run the Project
-1. Install Ollama if not already downloaded: https://ollama.com/download
-2. Run llama3.2 in the terminal by entering: 
-   ollama pull llama3.2
-3. Clone the repository:
-   git clone https://github.com/ezafrir/Group07_SWE_Project.git
-4. Navigate into the project folder in the terminal by entering:
-   cd Group07_SWE_Project-main
-5. Install dependencies by entering:
-   npm install
-6. Start the server by entering:
-   node server.js
-4. Open the application in a browser: http://localhost:3000
+## Ollama Integration (CHANGED)
 
-## Running Unit Tests
-The project uses Jasmine for unit testing. Run tests using: npx jasmine
-Example output: 13 specs, 0 failures
+This project now uses **Ollama** to generate real AI responses locally.  
+**No API key is required.** Ollama runs entirely on your machine.
 
-## REST API Endpoints
-GET /api/me  
-POST /api/signup  
-POST /api/login  
-POST /api/logout  
-GET /api/conversations  
-GET /api/conversations/:id  
-POST /api/conversations  
-DELETE /api/conversations/:id  
-GET /api/bookmarks  
-POST /api/bookmarks/:id  
-DELETE /api/bookmarks/:id  
-GET /api/settings  
-PUT /api/settings/response-length  
-GET /api/search?q=query
+### Step 1 — Install Ollama
 
+Download from https://ollama.com/download and install it.
+
+### Step 2 — Pull a model
+
+```bash
+ollama pull llama3.2
+```
+
+You can use any model. Run `ollama list` to see what you have installed.  
+To change the model, edit `OLLAMA_MODEL` at the top of `llmService.js`.
+
+### Step 3 — Start Ollama
+
+```bash
+ollama serve
+```
+
+Ollama runs at `http://localhost:11434` by default.
+
+### Step 4 — Start the app
+
+```bash
+npm start
+```
+
+---
+
+## Node.js Version
+
+Node **18 or newer** is required.  
+`llmService.js` uses the built-in `fetch` API which was added in Node 18.
+
+If you must use an older Node version, install `node-fetch`:
+```bash
+npm install node-fetch
+```
+Then add this line at the top of `llmService.js`:
+```js
+const fetch = require("node-fetch");
+```
+
+---
+
+## Files Changed
+
+| File | What changed |
+|---|---|
+| `llmService.js` | Replaced hardcoded fake responses with real Ollama API calls. Function is now `async`. |
+| `server.js` | `createConversation` and `addMessageToConversation` are now `async`. The two POST route handlers that call them are `async` with `try/catch` for error handling. |
+| `package.json` | Added `engines` field documenting the Node 18+ requirement. |
+| `README.md` | Added Ollama setup instructions. |

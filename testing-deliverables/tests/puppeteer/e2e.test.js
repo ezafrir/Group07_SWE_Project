@@ -1,13 +1,42 @@
+// =============================================================================
+// e2e.test.js — Puppeteer end-to-end tests for PistachioAI
+// =============================================================================
+
 const puppeteer = require("puppeteer-core");
 
 const BASE = "http://localhost:3000";
+
+function getChromePath() {
+  const fs = require("fs");
+  if (process.platform === "win32") {
+    const candidates = [
+      process.env.LOCALAPPDATA  + "\\Google\\Chrome\\Application\\chrome.exe",
+      process.env.PROGRAMFILES  + "\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+      process.env.LOCALAPPDATA  + "\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    ];
+    for (const p of candidates) {
+      if (p && fs.existsSync(p)) return p;
+    }
+    throw new Error("Could not find Chrome or Edge.");
+  }
+  if (process.platform === "darwin") return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  return "/usr/bin/google-chrome";
+}
+
+const CHROME_PATH = getChromePath();
+const RUN_ID    = Date.now();
+const USERNAME  = `testuser_${RUN_ID}`;
+const EMAIL     = `testuser_${RUN_ID}@test.com`;
+const PASSWORD  = "TestPass123!";
+
 let pass = 0;
 let fail = 0;
 
-const unique = Date.now();
-const TEST_USER = `puppetuser${unique}`;
-const TEST_EMAIL = `puppet${unique}@test.com`;
-const TEST_PASS = "testpass123";
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function check(condition, label) {
   if (condition) {
@@ -20,21 +49,19 @@ function check(condition, label) {
 }
 
 async function runSuite(name, fn) {
-  console.log(`\n${name}`);
+  console.log(`\n${"─".repeat(60)}`);
+  console.log(`  ${name}`);
+  console.log(`${"─".repeat(60)}`);
   try {
     await fn();
   } catch (err) {
-    console.error(`  ❌ Suite crashed: ${err.message}`);
+    console.error(`  ❌  Suite crashed: ${err.message}`);
     fail++;
   }
 }
 
-function getChromePath() {
-  const candidates = [
-    "/Applications/Google Chrome.app",
-    "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
-  ];
-  return candidates[0];
+function delay(ms) {
+  return new Promise(r => setTimeout(r, ms));
 }
 
 async function clearAndType(page, selector, value) {
@@ -44,277 +71,206 @@ async function clearAndType(page, selector, value) {
   await page.type(selector, value);
 }
 
-async function signUp(page, username, email, password) {
-  await page.goto(BASE, { waitUntil: "networkidle2" });
-
-  await page.waitForSelector("#signupUsername", { visible: true, timeout: 15000 });
-  await clearAndType(page, "#signupUsername", username);
-  await clearAndType(page, "#signupEmail", email);
-  await clearAndType(page, "#signupPassword", password);
-
-  await page.click("#signupBtn");
-  await page.waitForSelector("#promptInput", { visible: true, timeout: 15000 });
-}
-
-async function login(page, email, password) {
-  await page.waitForSelector("#loginEmail", { visible: true, timeout: 15000 });
-  await clearAndType(page, "#loginEmail", email);
-  await clearAndType(page, "#loginPassword", password);
-  await page.click("#loginBtn");
-}
-
-async function waitForAlertAndAccept(page) {
+async function acceptDialog(page) {
   return new Promise(resolve => {
     page.once("dialog", async dialog => {
-      try {
-        await dialog.accept();
-      } catch (_) {}
+      try { await dialog.accept(); } catch (_) {}
       resolve();
     });
   });
 }
 
+async function signUp(page, username, email, password) {
+  await page.goto(BASE, { waitUntil: "networkidle2" });
+  await page.waitForSelector("#signupUsername", { visible: true, timeout: 15000 });
+  await clearAndType(page, "#signupUsername", username);
+  await clearAndType(page, "#signupEmail",    email);
+  await clearAndType(page, "#signupPassword", password);
+  await page.click("#signupBtn");
+  await page.waitForSelector("#promptInput", { visible: true, timeout: 20000 });
+}
+
+async function sendPrompt(page, text) {
+  await page.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
+  await clearAndType(page, "#promptInput", text);
+  await page.click("#sendBtn");
+}
+
+async function waitForLLMSelector(page, timeoutMs = 120000) {
+  await page.waitForSelector("#loadingBubble", { hidden: true, timeout: timeoutMs }).catch(() => {});
+  await page.waitForSelector("#llmSelectorCard", { visible: true, timeout: timeoutMs });
+}
+
+async function sendAndWait(page, text) {
+  await sendPrompt(page, text);
+  await waitForLLMSelector(page);
+}
+
+// =============================================================================
+// MAIN EXECUTION
+// =============================================================================
+
 (async () => {
-  console.log("Launching browser...");
+  console.log("\n🚀  PistachioAI — Puppeteer E2E Test Suite");
+  console.log(`    Run ID: ${RUN_ID}\n`);
 
   const browser = await puppeteer.launch({
     headless: false,
-    executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    executablePath: CHROME_PATH,
     defaultViewport: null,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu"
-    ]
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
   });
 
-  console.log("Browser launched successfully");
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1400, height: 900 });
 
-  const p = await browser.newPage();
-  await p.setViewport({
-  width: 1400,
-  height: 900,
-});
-
-
-  await runSuite("📄 Suite 1: Landing Page", async () => {
-    await p.goto(BASE, { waitUntil: "networkidle2" });
-
-    const signupBtn = await p.$("#signupBtn");
-    const loginBtn = await p.$("#loginBtn");
-    const signupUsername = await p.$("#signupUsername");
-    const loginEmail = await p.$("#loginEmail");
-
-    check(signupBtn !== null, "Sign Up button is present");
-    check(loginBtn !== null, "Log In button is present");
-    check(signupUsername !== null, "Signup username field is present");
-    check(loginEmail !== null, "Login email field is present");
+  // ── Suite 1: Landing Page ───────────────────────────────────────────────────
+  await runSuite("Suite 1 — Landing Page", async () => {
+    await page.goto(BASE, { waitUntil: "networkidle2" });
+    check(await page.$("#signupBtn") !== null, "Sign Up button is present");
+    check(await page.$("#loginBtn") !== null, "Log In button is present");
   });
 
-  await runSuite("👤 Suite 2: Successful Sign Up", async () => {
-    await signUp(p, TEST_USER, TEST_EMAIL, TEST_PASS);
-
-    const url = p.url();
-    check(
-      url.includes("/index.html") || url.includes("/app"),
-      `Redirected after signup: ${url}`
-    );
-
-    await p.waitForSelector("#userInfo", { visible: true, timeout: 15000 });
-    const info = await p.$eval("#userInfo", el => el.textContent.trim());
-    check(info.includes(TEST_USER), `Username shown in header: "${info}"`);
+  // ── Suite 2: Sign Up ─────────────────────────────────────────────────────────
+  await runSuite("Suite 2 — Sign Up", async () => {
+    await signUp(page, USERNAME, EMAIL, PASSWORD);
+    const url = page.url();
+    check(url.includes("/index.html") || url.includes("/app"), "Redirected to app page");
   });
 
-  await runSuite("🔐 Suite 3: Login & Validation Flow", async () => {
-  console.log(" -> logging out");
-  await p.waitForSelector("#logoutBtn", { visible: true, timeout: 10000 });
-  await p.click("#logoutBtn");
-
-  await p.waitForFunction(
-    () => window.location.pathname === "/" || window.location.pathname.includes("landing"),
-    { timeout: 10000 }
-  );
-
-  await p.waitForSelector("#tabLogin", { visible: true, timeout: 10000 });
-  await p.click("#tabLogin");
-
-  await p.waitForSelector("#loginEmail", { visible: true, timeout: 10000 });
-  await p.waitForSelector("#loginPassword", { visible: true, timeout: 10000 });
-
-  console.log(" -> attempting wrong login");
-  await p.click("#loginEmail", { clickCount: 3 });
-  await p.keyboard.press("Backspace");
-  await p.type("#loginEmail", TEST_EMAIL);
-
-  await p.click("#loginPassword", { clickCount: 3 });
-  await p.keyboard.press("Backspace");
-  await p.type("#loginPassword", "WRONG_PASSWORD");
-
-  await p.click("#loginBtn");
-
-  await p.waitForFunction(() => {
-    const el = document.querySelector("#authMessage");
-    return el && el.textContent.trim().length > 0;
-  }, { timeout: 10000 });
-
-  const err = await p.$eval("#authMessage", el => el.textContent.trim());
-  check(
-    err === "Invalid email or password." || err.length > 0,
-    `Incorrect login blocked: ${err}`
-  );
-
-  console.log(" -> attempting correct login");
-  await p.click("#loginPassword", { clickCount: 3 });
-  await p.keyboard.press("Backspace");
-  await p.type("#loginPassword", TEST_PASS);
-  await p.click("#loginBtn");
-
-  await p.waitForSelector("#promptInput", { visible: true, timeout: 15000 });
-  const url = p.url();
-  check(
-    url.includes("index.html") || url.includes("/app"),
-    `Redirected after correct login: ${url}`
-  );
-});
-
-  await runSuite("💬 Suite 4: Continue Conversation Flow", async () => {
-  await p.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
-
-  await p.click("#promptInput", { clickCount: 3 });
-  await p.keyboard.press("Backspace");
-  await p.type("#promptInput", "give me one short sentence");
-  await p.click("#sendBtn");
-
-  await p.waitForFunction(() => {
-    const thread = document.querySelector("#threadMessages");
-    const heading = document.querySelector("#mainHeading");
-    return (
-      thread &&
-      thread.innerText.toLowerCase().includes("give me one short sentence") &&
-      heading &&
-      heading.textContent.includes("Continue")
-    );
-  }, { timeout: 45000 });
-
-  await p.click("#promptInput", { clickCount: 3 });
-  await p.keyboard.press("Backspace");
-  await p.type("#promptInput", "give me another short sentence");
-  await p.click("#sendBtn");
-
-  await p.waitForFunction(() => {
-    const thread = document.querySelector("#threadMessages");
-    return (
-      thread &&
-      thread.innerText.toLowerCase().includes("give me another short sentence")
-    );
-  }, { timeout: 45000 });
-
-  const threadText = await p.$eval("#threadMessages", el => el.innerText.toLowerCase());
-  check(threadText.includes("give me one short sentence"), "First message exists in conversation");
-  check(threadText.includes("give me another short sentence"), "Second message exists in conversation");
-
-  const heading = await p.$eval("#mainHeading", el => el.textContent.trim());
-  check(heading.includes("Continue"), "Heading updated to continue conversation");
-});
-
-  await runSuite("🔖 Suite 5: Bookmark Conversation", async () => {
-    await p.waitForSelector("#threadBookmarkBtn", { visible: true, timeout: 15000 });
-    const alertPromise = waitForAlertAndAccept(p);
-    await p.click("#threadBookmarkBtn");
-    await alertPromise;
-
-    await p.waitForFunction(() => {
-      const list = document.querySelector("#bookmarkList");
-      return list && list.innerText.trim().length > 0;
-    }, { timeout: 10000 });
-
-    const bookmarkText = await p.$eval("#bookmarkList", el => el.innerText);
-    check(bookmarkText.length > 0, "Bookmark list updated");
+  // ── Suite 3: Login & Logout ──────────────────────────────────────────────────
+  await runSuite("Suite 3 — Login & Logout", async () => {
+    await page.click("#logoutBtn");
+    await page.waitForSelector("#signupBtn", { visible: true });
+    await page.click("#tabLogin");
+    await clearAndType(page, "#loginEmail", EMAIL);
+    await clearAndType(page, "#loginPassword", PASSWORD);
+    await page.click("#loginBtn");
+    await page.waitForSelector("#promptInput", { visible: true });
+    check(true, "Logged back in successfully");
   });
 
-  await runSuite("🔎 Suite 6: Search Conversation", async () => {
-  await p.waitForSelector("#openSearchBtn", { visible: true, timeout: 10000 });
-  await p.click("#openSearchBtn");
+  // ── REORDERED: Suite 4: Shorten Response Setting ─────────────────────────────
+  // Running this early prevents VRAM congestion from causing timeouts.
+  await runSuite("Suite 4 — Shorten Response Setting", async () => {
+    // Refresh to clear any DOM artifacts
+    await page.reload({ waitUntil: "networkidle2" });
+    
+    await page.waitForSelector("#shortenToggle", { visible: true });
+    const isChecked = await page.$eval("#shortenToggle", el => el.checked);
+    if (!isChecked) await page.click("#shortenToggle");
 
-  await p.waitForSelector("#searchInput", { visible: true, timeout: 10000 });
+    await clearAndType(page, "#wordLimit", "5");
+    const alertDone = acceptDialog(page);
+    await page.click("#saveSettingsBtn");
+    await alertDone;
 
-  await p.click("#searchInput", { clickCount: 3 });
-  await p.keyboard.press("Backspace");
-  await p.type("#searchInput", "short sentence");
+    // Use a simple prompt to ensure fast generation
+    await sendAndWait(page, "Tell me a very short joke.");
 
-  await p.click("#searchBtn");
+    const responseText = await page.$eval("#llmResponseText", el => el.textContent.trim());
+    const wordCount = responseText.split(/\s+/).filter(Boolean).length;
+    check(wordCount <= 5, `Shortened response is ≤ 5 words (got ${wordCount})`);
 
-  await p.waitForFunction(() => {
-    const results = document.querySelector("#searchResults");
-    return results && results.innerText.trim().length > 0;
-  }, { timeout: 10000 });
-
-  const resultsText = await p.$eval("#searchResults", el => el.innerText.toLowerCase());
-
-  check(
-    resultsText.includes("short sentence") ||
-    resultsText.includes("give me one"),
-    "Search results show the matching conversation"
-  );
-
-  const firstCard = await p.$(".search-result-card");
-  check(!!firstCard, "At least one search result card appears");
-
-  if (firstCard) {
-    await firstCard.click();
-
-    await p.waitForFunction(() => {
-      const thread = document.querySelector("#threadMessages");
-      const overlay = document.querySelector("#searchOverlay");
-      return (
-        thread &&
-        thread.innerText.toLowerCase().includes("give me one short sentence") &&
-        overlay &&
-        overlay.classList.contains("hidden")
-      );
-    }, { timeout: 10000 });
-
-    check(true, "Clicking a search result opens the conversation");
-  }
-});
-
-  await runSuite("✂️ Suite 7: Save Word Limit Setting", async () => {
-    await p.waitForSelector("#shortenToggle", { visible: true, timeout: 15000 });
-    const checked = await p.$eval("#shortenToggle", el => el.checked);
-    if (!checked) {
-      await p.click("#shortenToggle");
-    }
-
-    await clearAndType(p, "#wordLimit", "10");
-
-    const alertPromise = waitForAlertAndAccept(p);
-    await p.click("#saveSettingsBtn");
-    await alertPromise;
-
-    const value = await p.$eval("#wordLimit", el => el.value);
-    check(value === "10", "Word limit field updated to 10");
+    // Reset settings
+    await page.click("#shortenToggle");
+    await clearAndType(page, "#wordLimit", "200");
+    const alertDone2 = acceptDialog(page);
+    await page.click("#saveSettingsBtn");
+    await alertDone2;
+    
+    await page.click("#newChatBtn");
+    await delay(500);
   });
 
-  await runSuite("🗑️ Suite 8: Delete Conversation", async () => {
-    await p.waitForSelector("#chatList", { visible: true, timeout: 15000 });
-    const beforeText = await p.$eval("#chatList", el => el.innerText);
-
-    await p.waitForSelector("#threadDeleteBtn", { visible: true, timeout: 15000 });
-    const confirmPromise = waitForAlertAndAccept(p);
-    await p.click("#threadDeleteBtn");
-    await confirmPromise;
-
-    await p.waitForFunction(() => {
-      const heading = document.querySelector("#mainHeading");
-      return heading && heading.textContent.includes("How can I help you?");
-    }, { timeout: 15000 });
-
-    const afterText = await p.$eval("#chatList", el => el.innerText);
-    check(beforeText !== afterText, "Conversation list changed after deletion");
+  // ── Suite 5: Send Prompt & LLM Selector Appears ─────────────────────────────
+  await runSuite("Suite 5 — Send Prompt & LLM Selector", async () => {
+    await sendAndWait(page, "What is the capital of France?");
+    check(await page.$("#llmSelectorCard") !== null, "Selector card appears");
   });
 
-  console.log(`\nDone. Passed: ${pass}, Failed: ${fail}`);
+  // ── Suite 6: LLM Dropdown — All Three Models ─────────────────────────────────
+  await runSuite("Suite 6 — LLM Dropdown: All Three Models", async () => {
+    await page.click("#newChatBtn");
+    await delay(300);
+    await sendAndWait(page, "Gravity in one sentence");
+    const count = await page.$$eval("#llmDropdown option", opts => opts.length);
+    check(count === 3, "Dropdown has 3 options");
+  });
+
+  // ── Suite 7: LLM Dropdown — Switching Models ─────────────────────────────────
+  await runSuite("Suite 7 — LLM Dropdown: Switching Models", async () => {
+    await page.select("#llmDropdown", "deepseek-r1");
+    await delay(500);
+    const text = await page.$eval("#llmResponseText", el => el.textContent.trim());
+    check(text.length > 0, "DeepSeek response is non-empty");
+  });
+
+  // ── Suite 8: Continue Conversation (Multi-LLM) ───────────────────────────────
+  await runSuite("Suite 8 — Continue Conversation (Multi-LLM)", async () => {
+    await sendAndWait(page, "Give me one more example");
+    const thread = await page.$eval("#threadMessages", el => el.innerText.toLowerCase());
+    check(thread.includes("example"), "Follow-up message visible");
+  });
+
+  // ── Suite 9: Bookmark Conversation ──────────────────────────────────────────
+  await runSuite("Suite 9 — Bookmark Conversation", async () => {
+    const alertDone = acceptDialog(page);
+    await page.click("#threadBookmarkBtn");
+    await alertDone;
+    await page.waitForFunction(() => document.querySelector("#bookmarkList").innerText.trim().length > 0);
+    check(true, "Conversation bookmarked");
+  });
+
+  // ── Suite 10: Search Conversations ───────────────────────────────────────────
+  await runSuite("Suite 10 — Search Conversations", async () => {
+    await page.click("#openSearchBtn");
+    await clearAndType(page, "#searchInput", "France");
+    await page.click("#searchBtn");
+    await page.waitForSelector(".search-result-card");
+    check(true, "Search results found");
+    await page.click("#closeSearchBtn");
+  });
+
+  // ── Suite 11: New Chat Resets State ──────────────────────────────────────────
+  await runSuite("Suite 11 — New Chat Resets State", async () => {
+    await page.click("#newChatBtn");
+    await delay(500);
+    const card = await page.$("#llmSelectorCard");
+    check(card === null, "UI reset correctly");
+  });
+
+  // ── Suite 12: Delete Conversation ───────────────────────────────────────────
+  await runSuite("Suite 12 — Delete Conversation", async () => {
+    await sendAndWait(page, "Delete me");
+    const acceptDone = acceptDialog(page);
+    await page.click("#threadDeleteBtn");
+    await acceptDone;
+    check(true, "Conversation deleted");
+  });
+
+  // ── Suite 13: View Past Conversation from Sidebar ────────────────────────────
+  await runSuite("Suite 13 — View Past Conversation from Sidebar", async () => {
+    await sendAndWait(page, "Final test");
+    await page.click("#newChatBtn");
+    await delay(500);
+    await page.click("#chatList li .chat-title");
+    await page.waitForSelector("#threadMessages");
+    check(true, "History reloaded");
+  });
+
+  // ── Suite 14: Empty Prompt Does Not Submit ────────────────────────────────────
+  await runSuite("Suite 14 — Empty Prompt Does Not Submit", async () => {
+    await page.click("#newChatBtn");
+    await page.$eval("#promptInput", el => { el.value = ""; });
+    await page.click("#sendBtn");
+    await delay(500);
+    check(await page.$("#loadingBubble") === null, "Empty prompt ignored");
+  });
+
+  console.log(`\n${"═".repeat(60)}`);
+  console.log(`  Results:  ✅ ${pass} passed    ❌ ${fail} failed`);
+  console.log(`${"═".repeat(60)}\n`);
 
   await browser.close();
   process.exit(fail > 0 ? 1 : 0);

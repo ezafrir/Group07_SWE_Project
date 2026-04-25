@@ -30,11 +30,10 @@ async function runSuite(name, fn) {
 }
 
 function getChromePath() {
-  const candidates = [
-    "/Applications/Google Chrome.app",
-    "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
-  ];
-  return candidates[0];
+  if (process.platform === "win32") {
+    return `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`;
+  }
+  return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 }
 
 async function clearAndType(page, selector, value) {
@@ -79,7 +78,7 @@ async function waitForAlertAndAccept(page) {
 
   const browser = await puppeteer.launch({
     headless: false,
-    executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    executablePath: getChromePath(),
     defaultViewport: null,
     args: [
       "--no-sandbox",
@@ -312,6 +311,46 @@ async function waitForAlertAndAccept(page) {
 
     const afterText = await p.$eval("#chatList", el => el.innerText);
     check(beforeText !== afterText, "Conversation list changed after deletion");
+  });
+
+  await runSuite("🤖 Suite 9: Multi-LLM Responses", async () => {
+    // Start a fresh conversation to get 3-model responses
+    await p.waitForSelector("#newChatBtn", { visible: true, timeout: 10000 });
+    await p.click("#newChatBtn");
+
+    await p.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
+    await p.click("#promptInput", { clickCount: 3 });
+    await p.keyboard.press("Backspace");
+    await p.type("#promptInput", "What is machine learning?");
+    await p.click("#sendBtn");
+
+    // 3 sequential models can take several minutes — wait generously
+    await p.waitForFunction(() => {
+      const group = document.querySelector(".multi-response-group");
+      return group && group.querySelectorAll(".assistant-bubble").length >= 3;
+    }, { timeout: 180000 });
+
+    const bubbleCount = await p.$$eval(
+      ".multi-response-group .assistant-bubble",
+      els => els.length
+    );
+    check(bubbleCount >= 3, `Three model response bubbles rendered (got ${bubbleCount})`);
+
+    const threadText = await p.$eval("#threadMessages", el => el.textContent);
+    check(threadText.includes("Phi 3"),     "Phi 3 label present in thread");
+    check(threadText.includes("TinyLlama"), "TinyLlama label present in thread");
+    check(threadText.includes("Llama 3.2"), "Llama 3.2 label present in thread");
+  });
+
+  await runSuite("📋 Suite 10: Summarize Responses", async () => {
+    await p.waitForSelector("#threadSummarizeBtn", { visible: true, timeout: 10000 });
+    await p.click("#threadSummarizeBtn");
+
+    await p.waitForSelector("#summarySection", { visible: true, timeout: 180000 });
+
+    const summaryText = await p.$eval("#summarySection", el => el.innerText.trim());
+    check(summaryText.length > 0, "Summary section is non-empty");
+    check(summaryText.includes("Summary"), "Summary section contains 'Summary' heading");
   });
 
   console.log(`\nDone. Passed: ${pass}, Failed: ${fail}`);

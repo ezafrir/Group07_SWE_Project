@@ -622,6 +622,70 @@ body {
 }
 .message-bubble p { margin: 0; }
 
+/* Multi-LLM response group */
+.multi-response-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: stretch;
+  width: 100%;
+}
+
+/* LLM model name badges */
+.llm-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.llm-badge-1 { background: #EBF5E6; color: #3F6B3C; }
+.llm-badge-2 { background: #EBF0FB; color: #3A4F9B; }
+.llm-badge-3 { background: #FBF3EB; color: #9B6A3A; }
+[data-theme="dark"] .llm-badge-1 { background: #1F3322; color: #93C572; }
+[data-theme="dark"] .llm-badge-2 { background: #1C2140; color: #8FA8E8; }
+[data-theme="dark"] .llm-badge-3 { background: #2D1F0F; color: #D4924A; }
+
+/* Summarize button */
+.summarize-btn { color: var(--accent) !important; border-color: rgba(63,107,60,0.35) !important; }
+.summarize-btn:hover { background: var(--pill-bg) !important; }
+
+/* Summary section appended at the bottom of the thread */
+.summary-section {
+  align-self: stretch;
+  background: var(--surface-raised);
+  border: 1.5px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text);
+}
+.summary-header {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.summary-section p { margin: 0; }
+.summary-loading { color: var(--text-secondary); font-style: italic; display: flex; align-items: center; gap: 8px; }
+.summary-loading .dots { display: flex; gap: 4px; }
+.summary-loading .dots span {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--dot-color);
+  animation: bounce 1.2s infinite ease-in-out;
+}
+.summary-loading .dots span:nth-child(2) { animation-delay: 0.2s; }
+.summary-loading .dots span:nth-child(3) { animation-delay: 0.4s; }
+.summary-error { color: #E05252; }
+
 /* Loading bubble */
 .loading-bubble {
   align-self: flex-start;

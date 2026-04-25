@@ -7,6 +7,7 @@ const threadTitle         = document.getElementById("threadTitle");
 const threadMessages      = document.getElementById("threadMessages");
 const threadBookmarkBtn   = document.getElementById("threadBookmarkBtn");
 const threadUnbookmarkBtn = document.getElementById("threadUnbookmarkBtn");
+const threadSummarizeBtn  = document.getElementById("threadSummarizeBtn");
 const threadDeleteBtn     = document.getElementById("threadDeleteBtn");
 const promptInput         = document.getElementById("promptInput");
 const sendBtn             = document.getElementById("sendBtn");
@@ -213,6 +214,7 @@ function renderThread(conversation) {
 
   threadBookmarkBtn.onclick   = () => bookmarkConversation(conversation.id);
   threadUnbookmarkBtn.onclick = () => unbookmarkConversation(conversation.id);
+  threadSummarizeBtn.onclick  = () => requestSummary(conversation.id);
   threadDeleteBtn.onclick     = () => deleteConversation(conversation.id);
 
   threadMessages.innerHTML = "";
@@ -224,13 +226,42 @@ function renderThread(conversation) {
        ];
 
   messages.forEach(msg => {
-    const bubble = document.createElement("div");
-    bubble.className = `message-bubble ${msg.role === "user" ? "user-bubble" : "assistant-bubble"}`;
-    bubble.innerHTML = `
-      <span class="bubble-label">${msg.role === "user" ? "You" : "PistachioAI"}</span>
-      <p>${escapeHtml(msg.content)}</p>
-    `;
-    threadMessages.appendChild(bubble);
+    if (msg.role === "user") {
+      const bubble = document.createElement("div");
+      bubble.className = "message-bubble user-bubble";
+      bubble.innerHTML = `
+        <span class="bubble-label">You</span>
+        <p>${escapeHtml(msg.content)}</p>
+      `;
+      threadMessages.appendChild(bubble);
+    } else if (msg.role === "assistant") {
+      if (msg.responses) {
+        // Multi-LLM response group
+        const group = document.createElement("div");
+        group.className = "multi-response-group";
+        msg.responses.forEach((r, i) => {
+          const bubble = document.createElement("div");
+          bubble.className = "message-bubble assistant-bubble";
+          bubble.innerHTML = `
+            <span class="bubble-label">
+              <span class="llm-badge llm-badge-${i + 1}">${escapeHtml(r.model)}</span>
+            </span>
+            <p>${escapeHtml(r.content)}</p>
+          `;
+          group.appendChild(bubble);
+        });
+        threadMessages.appendChild(group);
+      } else {
+        // Legacy single-response fallback
+        const bubble = document.createElement("div");
+        bubble.className = "message-bubble assistant-bubble";
+        bubble.innerHTML = `
+          <span class="bubble-label">PistachioAI</span>
+          <p>${escapeHtml(msg.content)}</p>
+        `;
+        threadMessages.appendChild(bubble);
+      }
+    }
   });
 
   scrollToBottom();
@@ -239,6 +270,48 @@ function renderThread(conversation) {
   mainHeading.textContent = "Continue your conversation…";
 
   loadConversations();
+}
+
+// ─── Summary: synthesize the 3 LLM responses ─────────────────────────────────
+async function requestSummary(id) {
+  // Remove any existing summary so re-clicks refresh it
+  const existing = document.getElementById("summarySection");
+  if (existing) existing.remove();
+
+  const placeholder = document.createElement("div");
+  placeholder.id = "summarySection";
+  placeholder.className = "summary-section";
+  placeholder.innerHTML = `
+    <div class="summary-header">Summary</div>
+    <p class="summary-loading">Generating summary<span class="dots"><span></span><span></span><span></span></span></p>
+  `;
+  threadMessages.appendChild(placeholder);
+  scrollToBottom();
+
+  try {
+    const res  = await fetch(`/api/conversations/${id}/summary`, { method: "POST" });
+    const data = await res.json();
+
+    if (!res.ok) {
+      placeholder.innerHTML = `
+        <div class="summary-header">Summary</div>
+        <p class="summary-error">${escapeHtml(data.error || "Could not generate summary.")}</p>
+      `;
+      return;
+    }
+
+    placeholder.innerHTML = `
+      <div class="summary-header">Summary</div>
+      <p>${escapeHtml(data.summary)}</p>
+    `;
+  } catch {
+    placeholder.innerHTML = `
+      <div class="summary-header">Summary</div>
+      <p class="summary-error">Network error — could not reach the server.</p>
+    `;
+  }
+
+  scrollToBottom();
 }
 
 // ─── UC2: Open a previous conversation ───────────────────────────────────────

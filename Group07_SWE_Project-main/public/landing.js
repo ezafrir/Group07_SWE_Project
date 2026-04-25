@@ -1,3 +1,10 @@
+// Redirect already-authenticated users straight to the app
+(async () => {
+  const res  = await fetch("/api/me");
+  const data = await res.json();
+  if (data.loggedIn) window.location.href = "/app";
+})();
+
 const signupBtn = document.getElementById("signupBtn");
 const loginBtn = document.getElementById("loginBtn");
 const authMessage = document.getElementById("authMessage");

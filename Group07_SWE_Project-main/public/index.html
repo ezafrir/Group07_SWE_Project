@@ -97,8 +97,12 @@
 
         <div class="query-box">
           <input type="text" id="promptInput" placeholder="Ask PistachioAI anything…" class="prompt-input" autocomplete="off" />
-          <button id="sendBtn" class="send-btn">Send</button>
-          <button id="compareBtn" class="action-btn" onclick="runComparison()">Compare 3 LLMs</button>
+      
+          <!-- Add type="submit" or type="button" here depending on how your send function works -->
+          <button type="submit" id="sendBtn" class="send-btn">Send</button>
+      
+          <!-- The Fix: Add type="button" here so it doesn't trigger the default Send action -->
+          <button type="button" id="compareBtn" class="action-btn" onclick="runComparison()">Compare 3 LLMs</button>
         </div>
       </div>
 

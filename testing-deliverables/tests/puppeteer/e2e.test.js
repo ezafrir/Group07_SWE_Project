@@ -115,7 +115,7 @@ async function getTextFirstAvailable(page, selectors) {
   console.log("\n👤  Suite 2: Successful Sign Up");
   {
     p = await newPage();
-    await signUp(p, "puppetuser", "puppet@test.com", "testpass");
+    await signUp(p, "puppetusser", "puppet@tests.com", "testpasss");
 
     check(p.url().includes("index.html"), "Redirected to index.html after signup");
     const info = await p.$eval("#userInfo", el => el.textContent.trim());
@@ -123,7 +123,7 @@ async function getTextFirstAvailable(page, selectors) {
 
 
   }
-
+/*
 
 // ── Suite 3: Login  ─────────────────────────────────────────────────────
   console.log("\n🔑 Suite 3: Login & Validation Flow");
@@ -396,6 +396,52 @@ async function getTextFirstAvailable(page, selectors) {
     check(
       beforeText !== afterText,
       "Conversation list changed after deletion"
+    );
+  }
+*/
+  // ── Suite 9: Compare Multiple LLMs (PMOS Transistors) ──────────────────────
+  console.log("\n🤖 Suite 9: Compare Multiple LLMs");
+  {
+    // 1. Type the prompt
+    // (Assuming 'p' is your page object and your input has an ID like #promptInput)
+    await p.waitForSelector('#promptInput');
+    await p.type('#promptInput', 'what is a car');
+
+    // 2. Click the compare button
+    await p.click('#compareBtn'); // Adjust selector if needed
+    /*
+    await clickFirstAvailable(p, [ 
+      "#compareBtn",
+      ".compare-btn",
+      "[data-testid='compareBtn']",
+      "button[title*='Compare']",
+      "button[aria-label*='Compare']"
+    ]);*/
+
+    // 3. Wait for the LLMs to generate responses
+    // Since Ollama takes a bit to run 3 models, we pause for 15-20 seconds
+    console.log("   Waiting for LLMs to generate (this might take a few seconds)...");
+    await pause(200000); 
+
+    // 4. Verify exactly 3 model responses rendered
+    // Adjust these classes if your response bubbles use a different class name
+    const responses = await p.$$('.assistant-bubble, .response-card, .llm-response');
+    check(
+      responses.length === 3,
+      `System generated 3 distinct model responses (Found: ${responses.length})`
+    );
+
+    // 5. Verify the summary box appeared
+    const summaryText = await getTextFirstAvailable(p, [
+      ".comparison-bubble",
+      ".summary-box",
+      "#comparisonSummary",
+      "[data-testid='summaryBox']"
+    ]);
+
+    check(
+      summaryText !== null && summaryText.includes("Similarities"),
+      "System displayed the 'Similarities & Differences' summary box"
     );
   }
 

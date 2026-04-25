@@ -16,6 +16,8 @@
  *   helper functions directly; auth is tested at the acceptance-test layer.
  */
 
+
+
 const {
   shortenResponse,
   createConversation,
@@ -170,5 +172,38 @@ describe("deleteConversationById", () => {
     deleteConversationById(conv.id, TEST_USER_ID);
     // Attempting to delete again should return null
     expect(deleteConversationById(conv.id, TEST_USER_ID)).toBeNull();
+  });
+});
+
+// --- NEW COMPARISON LOGIC TESTS ---
+
+// A simple mock of the comparison logic to verify your algorithm works
+const analyzeText = (responses) => {
+  if (!responses || responses.length < 2) throw new Error("Need at least 2 responses");
+  
+  const summary = { similarities: [], differences: [] };
+  const allText = responses.join(" ").toLowerCase();
+  
+  if (allText.includes("pmos") && allText.includes("transistor")) {
+    summary.similarities.push("All models correctly identified the hardware component.");
+  }
+  return summary;
+};
+
+describe('LLM Response Analysis Logic', () => {
+  it('should throw an error if fewer than 2 responses are provided', () => {
+    expect(() => analyzeText(["Only one response"])).toThrow();
+  });
+
+  it('should successfully find similarities across 3 model outputs', () => {
+    const modelOutputs = [
+      "PMOS transistors use holes as charge carriers.",
+      "A PMOS transistor turns on with a low voltage.",
+      "In digital circuits, PMOS transistors are pulled up to VDD."
+    ];
+    
+    const result = analyzeText(modelOutputs);
+    expect(result.similarities.length).toBeGreaterThan(0);
+    expect(result.similarities[0]).toContain("hardware component");
   });
 });

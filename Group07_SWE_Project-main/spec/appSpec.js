@@ -1,13 +1,31 @@
 const {
   shortenResponse,
   createConversation,
+  addMessageToConversation,
   bookmarkConversation,
   unbookmarkConversation,
-  deleteConversationById
+  deleteConversationById,
+  fetchAllResponses,
+  setLLMServiceForTesting
 } = require("../server");
 
 const TEST_USER_ID = 1;
 
+// Mock LLM service — returns a deterministic response without needing Ollama running
+const MOCK_RESPONSE = "This is a mock AI response used for unit testing purposes.";
+function mockLLMService() {
+  return Promise.resolve(MOCK_RESPONSE);
+}
+
+beforeAll(() => {
+  setLLMServiceForTesting(mockLLMService);
+});
+
+afterAll(() => {
+  setLLMServiceForTesting(null); // restore real service
+});
+
+// ─── shortenResponse ──────────────────────────────────────────────────────────
 describe("shortenResponse", () => {
   it("shortens text to the requested number of words", () => {
     const text = "one two three four five";
@@ -22,14 +40,10 @@ describe("shortenResponse", () => {
   });
 });
 
+// ─── createConversation ───────────────────────────────────────────────────────
 describe("conversation features", () => {
-  it("creates a new conversation object", () => {
-    const conversation = createConversation(
-      "help me study for calc",
-      false,
-      TEST_USER_ID
-    );
-
+  it("creates a new conversation object", async () => {
+    const conversation = await createConversation("help me study for calc", false, TEST_USER_ID);
     expect(conversation).toBeDefined();
     expect(conversation.prompt).toBe("help me study for calc");
     expect(conversation.response).toBeDefined();
@@ -38,25 +52,15 @@ describe("conversation features", () => {
     expect(conversation.createdAt).toBeDefined();
   });
 
-  it("creates a shortened conversation response when shorten is true", () => {
-    const conversation = createConversation(
-      "help me study for my exam",
-      true,
-      TEST_USER_ID
-    );
-
+  it("creates a shortened conversation response when shorten is true", async () => {
+    const conversation = await createConversation("help me study for my exam", true, TEST_USER_ID);
     expect(conversation).toBeDefined();
     expect(conversation.response.split(/\s+/).length).toBeLessThanOrEqual(200);
   });
 
-  it("bookmarks an existing conversation", () => {
-    const conversation = createConversation(
-      "debug my javascript code",
-      false,
-      TEST_USER_ID
-    );
+  it("bookmarks an existing conversation", async () => {
+    const conversation = await createConversation("debug my javascript code", false, TEST_USER_ID);
     const result = bookmarkConversation(conversation.id, TEST_USER_ID);
-
     expect(result).toBeDefined();
     expect(result.bookmarked).toBeTrue();
   });
@@ -66,14 +70,9 @@ describe("conversation features", () => {
     expect(result).toBeNull();
   });
 
-  it("deletes an existing conversation", () => {
-    const conversation = createConversation(
-      "recommend a movie",
-      false,
-      TEST_USER_ID
-    );
+  it("deletes an existing conversation", async () => {
+    const conversation = await createConversation("recommend a movie", false, TEST_USER_ID);
     const deleted = deleteConversationById(conversation.id, TEST_USER_ID);
-
     expect(deleted).toBeDefined();
     expect(deleted.id).toBe(conversation.id);
   });
@@ -83,58 +82,96 @@ describe("conversation features", () => {
     expect(result).toBeNull();
   });
 
-  //newer tests with userid: 
+  it("stores the correct userId on a new conversation", async () => {
+    const conversation = await createConversation("hello world", false, TEST_USER_ID);
+    expect(conversation.userId).toBe(TEST_USER_ID);
+  });
 
-it("stores the correct userId on a new conversation", () => { // test that the correct userId is stored in a new conversation
-  const conversation = createConversation("hello world", false, TEST_USER_ID);  // create a new conversation with a test user ID
-  expect(conversation.userId).toBe(TEST_USER_ID);// verify the conversation object contains the correct userId
+  it("stores the prompt exactly as entered", async () => {
+    const prompt = "help me with calculus";
+    const conversation = await createConversation(prompt, false, TEST_USER_ID);
+    expect(conversation.prompt).toBe(prompt);
+  });
+
+  it("creates a response with nonzero length", async () => {
+    const conversation = await createConversation("hello", false, TEST_USER_ID);
+    expect(conversation.response.length).toBeGreaterThan(0);
+  });
+
+  it("adds a timestamp when a conversation is created", async () => {
+    const conversation = await createConversation("timestamp test", false, TEST_USER_ID);
+    expect(typeof conversation.createdAt).toBe("string");
+    expect(conversation.createdAt.length).toBeGreaterThan(0);
+  });
+
+  it("does not shorten when shorten is false", async () => {
+    const conversation = await createConversation("help me study", false, TEST_USER_ID);
+    expect(conversation.response).toBeDefined();
+    expect(conversation.response.length).toBeGreaterThan(0);
+  });
+
+  it("removes a bookmark from an existing conversation", async () => {
+    const conversation = await createConversation("saved conversation", false, TEST_USER_ID);
+    bookmarkConversation(conversation.id, TEST_USER_ID);
+    const result = unbookmarkConversation(conversation.id, TEST_USER_ID);
+    expect(result).toBeDefined();
+    expect(result.bookmarked).toBeFalse();
+  });
+
+  it("returns null when unbookmarking a nonexistent conversation", () => {
+    const result = unbookmarkConversation(999999, TEST_USER_ID);
+    expect(result).toBeNull();
+  });
 });
 
-it("stores the prompt exactly as entered", () => {// test that the prompt is stored exactly as it was entered
-  const prompt = "help me with calculus"; // define a prompt string
-  const conversation = createConversation(prompt, false, TEST_USER_ID); // create a conversation using that prompt
-  expect(conversation.prompt).toBe(prompt); // verify the stored prompt matches the original prompt
-});
+// ─── Multi-LLM response features ─────────────────────────────────────────────
+describe("multi-LLM response features", () => {
+  it("fetchAllResponses returns exactly 3 responses", async () => {
+    const responses = await fetchAllResponses("what is AI?", false);
+    expect(responses.length).toBe(3);
+  });
 
-it("creates a response with nonzero length", () => { // test that a response is generated for each conversation
-  const conversation = createConversation("hello", false, TEST_USER_ID);  // create a conversation
-  expect(conversation.response.length).toBeGreaterThan(0); // check that the response text is not empty
-});
+  it("each response has a non-empty model name and content", async () => {
+    const responses = await fetchAllResponses("explain gravity", false);
+    responses.forEach(r => {
+      expect(r.model).toBeDefined();
+      expect(r.model.length).toBeGreaterThan(0);
+      expect(r.content).toBeDefined();
+      expect(r.content.length).toBeGreaterThan(0);
+    });
+  });
 
-it("adds a timestamp when a conversation is created", () => {// test that a timestamp is added when a conversation is created
-  const conversation = createConversation("timestamp test", false, TEST_USER_ID); // create a conversation
-  expect(typeof conversation.createdAt).toBe("string");// verify the createdAt field exists and is a string
-  expect(conversation.createdAt.length).toBeGreaterThan(0);// verify the timestamp string is not empty
-});
+  it("response model names are Llama 3.2, TinyLlama, and Phi 3 in order", async () => {
+    const responses = await fetchAllResponses("test prompt", false);
+    expect(responses[0].model).toBe("Llama 3.2");
+    expect(responses[1].model).toBe("TinyLlama");
+    expect(responses[2].model).toBe("Phi 3");
+  });
 
-it("does not shorten when shorten is false", () => {// test that responses are not shortened when shorten=false
-  const conversation = createConversation("help me study", false, TEST_USER_ID);  // create a conversation without shortening the response
-  expect(conversation.response).toBeDefined();  // verify a response was generated
-  expect(conversation.response.length).toBeGreaterThan(0);  // verify the response has content
-});
+  it("conversation messages include an assistant entry with a responses array", async () => {
+    const conversation = await createConversation("test multi-llm", false, TEST_USER_ID);
+    const assistantMsg = conversation.messages.find(m => m.role === "assistant");
+    expect(assistantMsg).toBeDefined();
+    expect(Array.isArray(assistantMsg.responses)).toBeTrue();
+    expect(assistantMsg.responses.length).toBe(3);
+  });
 
+  it("shortens all 3 responses when shorten is true", async () => {
+    const responses = await fetchAllResponses("test shortening", true);
+    responses.forEach(r => {
+      expect(r.content.split(/\s+/).length).toBeLessThanOrEqual(200);
+    });
+  });
 
-
-
-
-
-
-//newer tests for unbookmarking:
-
-it("removes a bookmark from an existing conversation", () => {
-  const conversation = createConversation(
-    "saved conversation",
-    false,
-    TEST_USER_ID
-  );
-  bookmarkConversation(conversation.id, TEST_USER_ID); //bookmark the convo
-  const result = unbookmarkConversation(conversation.id, TEST_USER_ID); //remove the bookmarj
-  expect(result).toBeDefined(); //check if correct obj was returned
-  expect(result.bookmarked).toBeFalse(); //check if bookmark was removed
-});
-
-it("returns null when unbookmarking a nonexistent conversation", () => { //check that unbookmarking a conversation that doesn't exist returns null
-  const result = unbookmarkConversation(999999, TEST_USER_ID);
-  expect(result).toBeNull(); //should return null since the conversation doesn't exist
-});
+  it("addMessageToConversation appends a multi-LLM assistant message", async () => {
+    const conversation = await createConversation("initial message", false, TEST_USER_ID);
+    const updated = await addMessageToConversation(
+      conversation.id, "follow-up message", false, TEST_USER_ID
+    );
+    expect(updated).toBeDefined();
+    const messages = updated.messages;
+    const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
+    expect(Array.isArray(lastAssistant.responses)).toBeTrue();
+    expect(lastAssistant.responses.length).toBe(3);
+  });
 });

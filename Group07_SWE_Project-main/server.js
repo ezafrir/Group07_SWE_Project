@@ -11,6 +11,12 @@ const express = require("express");
 const session = require("express-session");
 const generateLLMResponse = require("./llmService");
 
+// Allows unit tests to inject a mock without touching the real Ollama service
+let _llmService = generateLLMResponse;
+function setLLMServiceForTesting(fn) {
+  _llmService = fn != null ? fn : generateLLMResponse;
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -25,7 +31,14 @@ app.use(
   })
 );
 
-// In-memory data 
+// Three locally-hosted Ollama models
+const LLM_PERSONAS = [
+  { name: "Llama 3.2", model: "llama3.2"  },
+  { name: "TinyLlama", model: "tinyllama" },
+  { name: "Phi 3",     model: "phi3"      }
+];
+
+// In-memory data
 let conversations = [];
 let nextId = 1;
 
@@ -47,7 +60,7 @@ function shortenResponse(text, maxWords) {
 async function generateChatTitle(prompt) {
   try {
     const titlePrompt = `Summarize the following question or topic in 4-7 words as a concise chat title. Use title case. No quotes, no punctuation at the end. Just the title.\n\nQuestion: ${prompt}`;
-    const rawTitle = await generateLLMResponse(titlePrompt);
+    const rawTitle = await _llmService(titlePrompt);
     // Clean up: strip quotes, trim whitespace, limit length
     const cleaned = rawTitle.replace(/["']/g, "").trim();
     return cleaned.length > 60 ? cleaned.slice(0, 60) + "…" : cleaned;
@@ -57,25 +70,34 @@ async function generateChatTitle(prompt) {
   }
 }
 
-// CHANGED: Now async — must await the Ollama API call inside generateLLMResponse
-async function createConversation(prompt, shorten, userId) {
-  let response = await generateLLMResponse(prompt); // CHANGED: await added
-
-  if (shorten) {
-    response = shortenResponse(response, settings.responseLength);
+// Fetch responses sequentially so only one model runs at a time (reduces memory/CPU load)
+async function fetchAllResponses(prompt, shorten) {
+  const results = [];
+  for (const persona of LLM_PERSONAS) {
+    const content = await _llmService(prompt, null, persona.model);
+    results.push({
+      model: persona.name,
+      content: shorten ? shortenResponse(content, settings.responseLength) : content
+    });
   }
+  return results;
+}
 
-  const title = await generateChatTitle(prompt);
+async function createConversation(prompt, shorten, userId) {
+  const [responses, title] = await Promise.all([
+    fetchAllResponses(prompt, shorten),
+    generateChatTitle(prompt)
+  ]);
 
   const conversation = {
     id: nextId++,
     userId,
     title,
     prompt,
-    response,
+    response: responses[0].content, // kept for search/legacy compatibility
     messages: [
       { role: "user", content: prompt },
-      { role: "assistant", content: response }
+      { role: "assistant", responses }
     ],
     bookmarked: false,
     createdAt: new Date().toISOString(),
@@ -86,25 +108,20 @@ async function createConversation(prompt, shorten, userId) {
   return conversation;
 }
 
-// CHANGED: Now async — must await the Ollama API call inside generateLLMResponse
 async function addMessageToConversation(id, prompt, shorten, userId) {
   const conversation = conversations.find(
     c => c.id === id && c.userId === userId
   );
   if (!conversation) return null;
 
-  let response = await generateLLMResponse(prompt); // CHANGED: await added
-  if (shorten) {
-    response = shortenResponse(response, settings.responseLength);
-  }
+  const responses = await fetchAllResponses(prompt, shorten);
 
   conversation.messages.push({ role: "user", content: prompt });
-  conversation.messages.push({ role: "assistant", content: response });
+  conversation.messages.push({ role: "assistant", responses });
   conversation.updatedAt = new Date().toISOString();
 
-  // Keep legacy fields updated with the latest exchange
   conversation.prompt = prompt;
-  conversation.response = response;
+  conversation.response = responses[0].content;
 
   return conversation;
 }
@@ -407,7 +424,43 @@ app.delete("/api/bookmarks/:id", requireAuth, (req, res) => {// api route to rem
 
 
 
-// Settings routes 
+// Summary route — synthesizes the most recent 3 LLM responses into one paragraph
+app.post("/api/conversations/:id/summary", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const conversation = conversations.find(
+    c => c.id === id && c.userId === req.session.user.id
+  );
+  if (!conversation) {
+    return res.status(404).json({ error: "Conversation not found." });
+  }
+
+  const lastAssistant = [...conversation.messages]
+    .reverse()
+    .find(m => m.role === "assistant" && m.responses);
+
+  if (!lastAssistant) {
+    return res.status(400).json({ error: "No multi-LLM responses found to summarize." });
+  }
+
+  const responseBlock = lastAssistant.responses
+    .map((r, i) => `Response ${i + 1} (${r.model}):\n${r.content}`)
+    .join("\n\n");
+
+  const summaryPrompt =
+    `Here are ${lastAssistant.responses.length} different AI responses to the question: "${conversation.prompt}"\n\n` +
+    `${responseBlock}\n\n` +
+    `Synthesize these responses into one concise summary paragraph that captures the key points from all of them.`;
+
+  try {
+    const summary = await _llmService(summaryPrompt);
+    res.json({ summary });
+  } catch (err) {
+    console.error("Ollama error:", err.message);
+    res.status(502).json({ error: `LLM service error: ${err.message}` });
+  }
+});
+
+// Settings routes
 app.get("/api/settings", requireAuth, (req, res) => {
   res.json(settings);
 });
@@ -441,5 +494,7 @@ module.exports = {
   addMessageToConversation,
   bookmarkConversation,
   unbookmarkConversation,
-  deleteConversationById
+  deleteConversationById,
+  fetchAllResponses,
+  setLLMServiceForTesting
 };

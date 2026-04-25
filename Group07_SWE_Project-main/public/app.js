@@ -396,10 +396,12 @@ function renderComparison(data) {
   });
 
   // Render the comparison summary
-  const summaryDiv = document.createElement("div");
-  summaryDiv.className = "message-bubble"; 
-  summaryDiv.style.border = "2px solid var(--nut-color)";
-  summaryDiv.style.backgroundColor = "var(--shell-inner)";
+ const summaryDiv = document.createElement("div");
+summaryDiv.className = "message-bubble summary-box";
+summaryDiv.id = "comparisonSummary";
+summaryDiv.dataset.testid = "summaryBox";
+summaryDiv.style.border = "2px solid var(--nut-color)";
+summaryDiv.style.backgroundColor = "var(--shell-inner)";
   summaryDiv.innerHTML = `
     <span class="bubble-label">Similarities & Differences</span>
     <p>${escapeHtml(data.comparison)}</p>

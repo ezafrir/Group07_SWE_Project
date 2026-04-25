@@ -115,15 +115,15 @@ async function getTextFirstAvailable(page, selectors) {
   console.log("\n👤  Suite 2: Successful Sign Up");
   {
     p = await newPage();
-    await signUp(p, "puppetusser", "puppet@tests.com", "testpasss");
+    await signUp(p, "puppsetuser", "pudppet@tests.com", "testpaass");
 
     check(p.url().includes("index.html"), "Redirected to index.html after signup");
     const info = await p.$eval("#userInfo", el => el.textContent.trim());
-    check(info.includes("puppetuser"), `Username shown in header: "${info}"`);
+    check(info.includes("puppsetuser"), `Username shown in header: "${info}"`);
 
 
   }
-/*
+
 
 // ── Suite 3: Login  ─────────────────────────────────────────────────────
   console.log("\n🔑 Suite 3: Login & Validation Flow");
@@ -398,14 +398,14 @@ async function getTextFirstAvailable(page, selectors) {
       "Conversation list changed after deletion"
     );
   }
-*/
+
   // ── Suite 9: Compare Multiple LLMs (PMOS Transistors) ──────────────────────
   console.log("\n🤖 Suite 9: Compare Multiple LLMs");
   {
     // 1. Type the prompt
     // (Assuming 'p' is your page object and your input has an ID like #promptInput)
     await p.waitForSelector('#promptInput');
-    await p.type('#promptInput', 'what is a car');
+    await p.type('#promptInput', 'What is 1+1');
 
     // 2. Click the compare button
     await p.click('#compareBtn'); // Adjust selector if needed
@@ -421,7 +421,7 @@ async function getTextFirstAvailable(page, selectors) {
     // 3. Wait for the LLMs to generate responses
     // Since Ollama takes a bit to run 3 models, we pause for 15-20 seconds
     console.log("   Waiting for LLMs to generate (this might take a few seconds)...");
-    await pause(200000); 
+    await pause(300000); 
 
     // 4. Verify exactly 3 model responses rendered
     // Adjust these classes if your response bubbles use a different class name

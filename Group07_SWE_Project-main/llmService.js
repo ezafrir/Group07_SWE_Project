@@ -151,9 +151,9 @@ Nothing else. No exceptions.
 
 OUTPUT FORMAT -- MANDATORY. FOLLOW THIS EXACTLY:
 <<<FIND>>>
-(copy the exact lines from the file that need to change - verbatim, character for character)
+(paste exact lines from the file here — no parentheses, no explanation)
 <<<REPLACE>>>
-(the new lines that replace them)
+(paste new lines here)
 <<<END>>>
 
 RULES FOR THE FORMAT:
@@ -162,8 +162,14 @@ RULES FOR THE FORMAT:
 <<<REPLACE>>>
 (new lines to add at the top of the file) 
 <<<END>>>
+- Never reference variables at the top of the file that are declared later in the file
+- Always place new code AFTER the existing variable declarations section
+- Copy FIND lines CHARACTER FOR CHARACTER from the file — no paraphrasing
+- Never escape forward slashes. Write // not \/\/
+- If FIND is empty, leave it completely blank!!! no placeholder text, no parentheses, no explanation!
 - One block per change. Do not chain multiple blocks.
-- No markdown. No fences. No explanation before or after the block.
+- Never use markdown. No fences. No backticks. No explanation before or after the block.
+- Strip all prose before <<<FIND>>> and after <<<END>>>
 - First character of output must be <<<FIND>>>. Last characters must be <<<END>>>.
 
 NOT ALLOWED:

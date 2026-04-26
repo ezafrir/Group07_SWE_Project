@@ -525,9 +525,34 @@ function validateJS(code) {
   }
 }
 
+
 function applyDiff(originalContent, diffOutput) {
-  const findMatch    = diffOutput.match(/<<<FIND>>>([\s\S]*?)<<<REPLACE>>>/);
-  const replaceMatch = diffOutput.match(/<<<REPLACE>>>([\s\S]*?)<<<END>>>/);
+  // Strip markdown code fences
+  let cleaned = diffOutput.replace(/^```[\w]*\n?/m, "").replace(/```\s*$/m, "");
+
+  // Strip markdown hyperlinks: [text](url) → text
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+
+  // Clean escaped forward slashes
+  cleaned = cleaned.replace(/\\\//g, "/");
+
+  // Strip anything after <<<END>>>
+  if (cleaned.includes("<<<END>>>")) {
+    cleaned = cleaned.split("<<<END>>>")[0] + "<<<END>>>";
+  }
+
+  // If no diff block exists at all, check if it looks like raw code
+  // and prepend it to the file as a fallback
+  if (!cleaned.includes("<<<FIND>>>") && !cleaned.includes("<<<REPLACE>>>")) {
+    // Strip any trailing prose after the last closing brace
+    const lastBrace = cleaned.lastIndexOf("}");
+    const codeOnly = lastBrace !== -1 ? cleaned.slice(0, lastBrace + 1) : cleaned;
+    console.log("No diff block found — treating output as raw code prepend");
+    return codeOnly + "\n\n" + originalContent;
+  }
+
+  const findMatch    = cleaned.match(/<<<FIND>>>([\s\S]*?)<<<REPLACE>>>/);
+  const replaceMatch = cleaned.match(/<<<REPLACE>>>([\s\S]*?)<<<END>>>/);
 
   if (!findMatch || !replaceMatch) {
     throw new Error(
@@ -536,11 +561,13 @@ function applyDiff(originalContent, diffOutput) {
     );
   }
 
-  const findText    = findMatch[1];
-  const replaceText = replaceMatch[1];
+  let findText    = findMatch[1];
+  let replaceText = replaceMatch[1];
 
-  // Empty FIND = prepend to top of file
-  if (findText.trim() === "") {
+  const isPlaceholder = findText.trim().startsWith("(") && findText.trim().endsWith(")");
+  const isExample     = findText.includes("copy the exact lines") || findText.includes("verbatim");
+
+  if (findText.trim() === "" || isPlaceholder || isExample) {
     return replaceText + originalContent;
   }
 
@@ -553,7 +580,6 @@ function applyDiff(originalContent, diffOutput) {
 
   return originalContent.replace(findText, replaceText);
 }
-
 
 // /api/suggest, main self-modification endpoint
 // Expects: POST body { filePath: "public/app.js", instruction: "add dark mode toggle" }

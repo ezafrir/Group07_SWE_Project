@@ -875,3 +875,241 @@ body {
   .bottom-bar { padding: 10px 18px 14px; }
   .chat-scroll-area { padding: 16px 18px; }
 }
+
+/* ── Multi-LLM Inline Model Selector ────────────────────────────── */
+.model-selector-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  margin: 4px 0 8px;
+  background: var(--surface-raised);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  max-width: 480px;
+}
+
+.model-selector-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.model-dropdown {
+  flex: 1;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.model-dropdown:focus { border-color: var(--primary); }
+
+.model-loading-indicator {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.model-loading-indicator.hidden { display: none; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Multi-LLM: Wrapper + action buttons ─────────────────────────────────── */
+.model-selector-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+.model-actions-row {
+  display: flex;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.model-action-btn {
+  flex: 1;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.model-action-btn:hover {
+  background: var(--primary-light, rgba(91,143,100,0.10));
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.model-action-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.model-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Result panel ──────────────────────────────────────────────────────────── */
+.model-result-panel {
+  margin: 0 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  animation: fadeIn 0.18s ease;
+  overflow: hidden;
+}
+.model-result-panel.hidden { display: none; }
+
+.model-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised, var(--surface));
+}
+
+.model-result-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.model-result-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s;
+}
+.model-result-close:hover {
+  background: var(--danger-light, rgba(220,53,69,0.10));
+  color: var(--danger, #dc3545);
+}
+
+.model-result-body {
+  padding: 14px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text);
+  white-space: pre-wrap;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.model-result-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* ── Iteration 3: New UI elements ──────────────────────────────────────────── */
+
+/* Delete All Chats button in sidebar footer */
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+.delete-all-btn {
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: 1.5px solid var(--danger, #dc3545);
+  border-radius: 8px;
+  color: var(--danger, #dc3545);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+  text-align: center;
+}
+.delete-all-btn:hover {
+  background: var(--danger, #dc3545);
+  color: #fff;
+}
+
+/* Rename & Export icon buttons in chat list */
+.icon-btn.rename-btn {
+  font-size: 11px;
+}
+
+/* Gemini cloud button */
+.gemini-btn {
+  background: linear-gradient(135deg, #4285F4 0%, #0F9D58 50%, #F4B400 100%);
+  color: #fff !important;
+  border: none !important;
+  font-weight: 600;
+}
+.gemini-btn:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+.gemini-btn.active {
+  opacity: 1;
+  box-shadow: 0 0 0 2px #4285F4;
+}
+
+/* ── Groq button ───────────────────────────────────────────────────────────── */
+.groq-btn {
+  background: linear-gradient(135deg, #f55036 0%, #ff8c42 100%);
+  color: #fff !important;
+  border: none !important;
+  font-weight: 600;
+}
+.groq-btn:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+.groq-btn.active {
+  opacity: 1;
+  box-shadow: 0 0 0 2px #f55036;
+}
+
+/* ── Suggest a Change button & modal (Emma's feature) ───────────────────────── */
+.suggest-btn {
+  padding: 7px 14px;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+  white-space: nowrap;
+}
+.suggest-btn:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.suggest-modal {
+  max-width: 520px;
+}

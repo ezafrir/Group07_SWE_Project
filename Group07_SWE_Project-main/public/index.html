@@ -42,9 +42,10 @@
         <ul id="bookmarkList"></ul>
       </div>
 
-      <!-- Search All Conversations button pinned to bottom-left (Change #4) -->
+      <!-- Footer: search + delete all -->
       <div class="sidebar-footer">
         <button class="search-all-btn" id="openSearchBtn">🔍 Search All Conversations</button>
+        <button class="delete-all-btn" id="deleteAllChatsBtn">🗑 Delete All Chats</button>
       </div>
     </aside>
 
@@ -59,6 +60,7 @@
             <button class="theme-toggle-app" id="themeToggleApp" title="Toggle theme" aria-label="Toggle theme">
               <span class="theme-icon">🌿</span>
             </button>
+            <button class="suggest-btn" id="openSuggestBtn" title="Suggest a UI change">✦ Suggest a Change</button>
             <span id="userInfo" class="user-info-text"></span>
             <button id="logoutBtn" class="logout-btn">Log Out</button>
           </div>
@@ -71,9 +73,9 @@
           <div class="thread-header">
             <h2 id="threadTitle"></h2>
             <div class="thread-actions">
-              <button id="threadBookmarkBtn" class="action-btn">📌 Bookmark</button>
+              <button id="threadBookmarkBtn"   class="action-btn">📌 Bookmark</button>
               <button id="threadUnbookmarkBtn" class="action-btn">🗑 Unbookmark</button>
-              <button id="threadDeleteBtn" class="action-btn danger-btn">✕ Delete</button>
+              <button id="threadDeleteBtn"     class="action-btn danger-btn">✕ Delete</button>
             </div>
           </div>
           <div id="threadMessages" class="thread-messages"></div>
@@ -104,7 +106,7 @@
     </main>
   </div>
 
-  <!-- Search Modal (Change #4) -->
+  <!-- Search Modal -->
   <div class="search-modal-overlay hidden" id="searchOverlay">
     <div class="search-modal">
       <div class="search-modal-header">
@@ -122,10 +124,46 @@
     </div>
   </div>
 
+  <!-- Suggest a Change Modal -->
+  <div class="search-modal-overlay hidden" id="suggestOverlay">
+    <div class="search-modal suggest-modal">
+      <div class="search-modal-header">
+        <h3>✦ Suggest a Change</h3>
+        <button class="search-modal-close" id="closeSuggestBtn">✕</button>
+      </div>
+      <div class="search-modal-body">
+        <label class="settings-label" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
+          <span style="font-size:13px;font-weight:600;">File to modify</span>
+          <select id="suggestFile" class="auth-input" style="cursor:pointer;">
+            <option value="public/app.js">public/app.js — Frontend logic</option>
+            <option value="public/index.html">public/index.html — Main UI layout</option>
+            <option value="public/style.css">public/style.css — Styles</option>
+            <option value="public/landing.html">public/landing.html — Login page</option>
+            <option value="public/landing.js">public/landing.js — Login logic</option>
+          </select>
+        </label>
+        <label class="settings-label" style="display:flex;flex-direction:column;gap:6px;">
+          <span style="font-size:13px;font-weight:600;">Your instruction</span>
+          <textarea
+            id="suggestInstruction"
+            class="auth-input"
+            placeholder="Describe the change you want, e.g. 'Add a character counter below the prompt input'"
+            style="min-height:100px;resize:vertical;font-family:inherit;font-size:14px;padding:10px;"
+          ></textarea>
+        </label>
+        <div class="search-modal-actions" style="margin-top:14px;">
+          <button id="suggestSubmitBtn" class="auth-btn primary-btn">Apply Change</button>
+          <button id="suggestCancelBtn" class="auth-btn secondary-btn">Cancel</button>
+        </div>
+        <p id="suggestStatus" style="margin-top:14px;font-size:13px;color:var(--text-secondary);min-height:20px;white-space:pre-wrap;"></p>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
   <script>
     // Theme persistence
-    const html = document.documentElement;
+    const html  = document.documentElement;
     const saved = localStorage.getItem('pistachioTheme') || 'light';
     html.setAttribute('data-theme', saved);
     const tBtn = document.getElementById('themeToggleApp');

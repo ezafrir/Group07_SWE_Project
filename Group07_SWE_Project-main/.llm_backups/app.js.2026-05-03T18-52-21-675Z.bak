@@ -147,9 +147,7 @@ async function sendPrompt() {
 
   isSending = true;
   sendBtn.disabled = true;
-
-sendBtn.textContent = "Loading…";
-
+  sendBtn.textContent = "Sending…";
   promptInput.value = "";
 
   showUserBubble(prompt);

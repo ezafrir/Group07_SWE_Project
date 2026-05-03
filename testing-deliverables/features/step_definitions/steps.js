@@ -1,377 +1,248 @@
-const { Given, When, Then, Before, After, setDefaultTimeout } = require("@cucumber/cucumber");
-const puppeteer = require("puppeteer-core");
-const assert = require("assert");
+/**
+ * features/step_definitions/steps.js
+ *
+ * Cucumber step definitions — every step used across all .feature files.
+ * Each test runs in a fresh browser page (Before/After hooks).
+ *
+ * Requires:
+ *   npm install --save-dev @cucumber/cucumber puppeteer
+ *
+ * The server must already be running on http://localhost:3000 before you
+ * invoke `npx cucumber-js`.
+ */
 
-setDefaultTimeout(60000);
+const { Given, When, Then, Before, After } = require("@cucumber/cucumber");
+const puppeteer = require("puppeteer");
+const assert = require("assert");
 
 const BASE = "http://localhost:3000";
 
 let browser;
 let page;
 
-function uniqueUser(prefix = "user") {
-  const id = `${Date.now()}${Math.floor(Math.random() * 10000)}`;
-  return {
-    username: `${prefix}${id}`,
-    email: `${prefix}${id}@example.com`,
-    password: "Test1234!"
-  };
-}
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 Before(async () => {
   browser = await puppeteer.launch({
-    headless: false,
-    executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    defaultViewport: null,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu"
-    ]
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
   });
-
   page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 800 });
 });
 
 After(async () => {
-  if (browser) {
-    await browser.close();
-  }
+  await browser.close();
 });
 
-async function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function goHome() {
-  await page.goto(BASE, { waitUntil: "networkidle2" });
-}
-
-async function ensureLoginTab() {
-  const loginTab = await page.$("#tabLogin");
-  if (loginTab) {
-    await page.click("#tabLogin");
-  }
-}
-
-async function waitForApp() {
-  await page.waitForFunction(() => {
-    return !!document.querySelector("#promptInput");
-  }, { timeout: 20000 });
-}
-
-async function waitForSidebarEntry() {
-  await page.waitForFunction(() => {
-    const list = document.querySelector("#chatList");
-    return list && list.innerText.trim().length > 0;
-  }, { timeout: 20000 });
-}
-
-async function waitForBookmarkEntry() {
-  await page.waitForFunction(() => {
-    const list = document.querySelector("#bookmarkList");
-    return list && list.innerText.trim().length > 0;
-  }, { timeout: 15000 });
-}
+// ── Shared helpers ────────────────────────────────────────────────────────────
 
 async function signUp(username, email, password) {
-  await goHome();
-
-  const promptExists = await page.$("#promptInput");
-  if (promptExists) return;
-
-  await page.waitForSelector("#signupUsername", { visible: true, timeout: 10000 });
-
+  await page.goto(BASE, { waitUntil: "networkidle0" });
   await page.$eval("#signupUsername", el => (el.value = ""));
   await page.type("#signupUsername", username);
-
   await page.$eval("#signupEmail", el => (el.value = ""));
   await page.type("#signupEmail", email);
-
   await page.$eval("#signupPassword", el => (el.value = ""));
   await page.type("#signupPassword", password);
-
   await page.click("#signupBtn");
-  await waitForApp();
+  await page.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
 }
 
-async function login(email, password) {
-  await goHome();
-
-  const promptExists = await page.$("#promptInput");
-  if (promptExists) return;
-
-  await ensureLoginTab();
-  await page.waitForSelector("#loginEmail", { visible: true, timeout: 10000 });
-
-  await page.$eval("#loginEmail", el => (el.value = ""));
-  await page.type("#loginEmail", email);
-
-  await page.$eval("#loginPassword", el => (el.value = ""));
-  await page.type("#loginPassword", password);
-
-  await page.click("#loginBtn");
-  await waitForApp();
+async function logOut() {
+  await page.evaluate(async () => {
+    await fetch("/api/logout", { method: "POST" });
+  });
 }
 
-async function logout() {
-  const logoutBtn = await page.$("#logoutBtn");
-  if (logoutBtn) {
-    await page.click("#logoutBtn");
-    await page.waitForSelector("#tabLogin", { visible: true, timeout: 10000 });
-  }
+async function delay(ms) {
+  return new Promise(r => setTimeout(r, ms));
 }
 
-async function submitPrompt(text) {
-  await page.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
-  await page.click("#promptInput", { clickCount: 3 });
-  await page.keyboard.press("Backspace");
-  await page.type("#promptInput", text);
-
-  await page.waitForSelector("#sendBtn", { visible: true, timeout: 10000 });
-  await page.click("#sendBtn");
-}
-
-async function waitForResponse() {
-  await page.waitForSelector("#loadingBubble", { hidden: true, timeout: 45000 }).catch(() => {});
-
-  await page.waitForFunction(() => {
-    const thread = document.querySelector("#threadMessages");
-    return thread && thread.innerText.trim().length > 0;
-  }, { timeout: 15000 });
-}
-
-async function createConversation(promptText = "give me one short sentence") {
-  await submitPrompt(promptText);
-  await waitForResponse();
-  await waitForSidebarEntry();
-}
-
-async function bookmarkCurrentConversation() {
-  await page.waitForSelector("#threadBookmarkBtn", { visible: true, timeout: 10000 });
-  await page.click("#threadBookmarkBtn");
-  await delay(1000);
-}
+// ── Given steps ───────────────────────────────────────────────────────────────
 
 Given("I navigate to the home page", async () => {
-  await goHome();
+  await page.goto(BASE, { waitUntil: "networkidle0" });
 });
 
 Given("I am on the landing page", async () => {
-  await goHome();
-  const promptExists = await page.$("#promptInput");
-  if (promptExists) {
-    await logout();
-  }
-  await page.waitForSelector("#signupBtn", { visible: true, timeout: 10000 });
+  await page.goto(BASE, { waitUntil: "networkidle0" });
 });
 
 Given("I am not logged in", async () => {
-  await goHome();
-  const promptExists = await page.$("#promptInput");
-  if (promptExists) {
-    await logout();
-  }
+  // Fresh page — no session cookie present
 });
 
 Given("I am already logged in", async () => {
-  const user = uniqueUser("autouser");
-  await signUp(user.username, user.email, user.password);
+  await signUp("autouser", "auto@example.com", "pass123");
 });
 
 Given("a user already exists with email {string}", async (email) => {
-  await goHome();
-  await page.waitForSelector("#signupUsername", { visible: true, timeout: 10000 });
-
-  await page.$eval("#signupUsername", el => (el.value = ""));
-  await page.type("#signupUsername", `user${Date.now()}`);
-
-  await page.$eval("#signupEmail", el => (el.value = ""));
-  await page.type("#signupEmail", email);
-
-  await page.$eval("#signupPassword", el => (el.value = ""));
-  await page.type("#signupPassword", "Test1234!");
-
-  await page.click("#signupBtn");
-  await delay(1000);
-  await logout().catch(() => {});
+  await signUp("firstuser", email, "pass");
+  await logOut();
 });
 
 Given("a registered user exists with email {string} and password {string}", async (email, password) => {
-  await goHome();
-  await page.waitForSelector("#signupUsername", { visible: true, timeout: 10000 });
-
-  await page.$eval("#signupUsername", el => (el.value = ""));
-  await page.type("#signupUsername", `user${Date.now()}`);
-
-  await page.$eval("#signupEmail", el => (el.value = ""));
-  await page.type("#signupEmail", email);
-
-  await page.$eval("#signupPassword", el => (el.value = ""));
-  await page.type("#signupPassword", password);
-
-  await page.click("#signupBtn");
-  await delay(1000);
-  await logout().catch(() => {});
+  await signUp("reguser", email, password);
+  await logOut();
 });
 
 Given("I am logged in and on the app page", async () => {
-  const user = uniqueUser("appuser");
-  await signUp(user.username, user.email, user.password);
-  await page.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
+  await signUp("appuser", "appuser@example.com", "pass");
+  assert.ok(page.url().includes("/app"), "Should be on /app after signup");
 });
 
 Given("I am logged in with an existing conversation", async () => {
-  const user = uniqueUser("convuser");
-  await signUp(user.username, user.email, user.password);
-  await createConversation("give me one short sentence");
+  await signUp("convuser", "convuser@example.com", "pass");
+  await page.type("#promptInput", "Tell me about debugging");
+  await page.click("#sendBtn");
+  await page.waitForSelector(".responseCard");
 });
 
 Given("I am logged in and have a bookmarked conversation", async () => {
-  const user = uniqueUser("bmuser");
-  await signUp(user.username, user.email, user.password);
-  await createConversation("give me one short sentence");
-  await bookmarkCurrentConversation();
-  await waitForBookmarkEntry();
+  await signUp("bmuser", "bmuser@example.com", "pass");
+  await page.type("#promptInput", "How do I study?");
+  await page.click("#sendBtn");
+  await page.waitForSelector(".responseCard");
+  await page.click(".responseActions button");
+  await page.waitForFunction(
+    () => document.querySelector("#bookmarkList li") !== null
+  );
+});
+
+// ── When steps ────────────────────────────────────────────────────────────────
+
+When("I am on the landing page", async () => {
+  await page.goto(BASE, { waitUntil: "networkidle0" });
 });
 
 When("I am on the app page", async () => {
-  await goHome();
-  const promptExists = await page.$("#promptInput");
-  if (!promptExists) {
-    const user = uniqueUser("appuser");
-    await signUp(user.username, user.email, user.password);
-  }
+  await page.goto(`${BASE}/app`, { waitUntil: "networkidle0" });
 });
 
 When("I navigate to {string}", async (path) => {
-  await page.goto(`${BASE}${path}`, { waitUntil: "networkidle2" });
+  await page.goto(`${BASE}${path}`, { waitUntil: "networkidle0" });
 });
 
-When("I fill in signup username with {string}", async value => {
-  await page.waitForSelector("#signupUsername", { visible: true, timeout: 10000 });
+When("I fill in signup username with {string}", async (value) => {
   await page.$eval("#signupUsername", el => (el.value = ""));
   await page.type("#signupUsername", value);
 });
 
-When("I fill in signup email with {string}", async value => {
-  await page.waitForSelector("#signupEmail", { visible: true, timeout: 10000 });
+When("I fill in signup email with {string}", async (value) => {
   await page.$eval("#signupEmail", el => (el.value = ""));
   await page.type("#signupEmail", value);
 });
 
-When("I fill in signup password with {string}", async value => {
-  await page.waitForSelector("#signupPassword", { visible: true, timeout: 10000 });
+When("I fill in signup password with {string}", async (value) => {
   await page.$eval("#signupPassword", el => (el.value = ""));
   await page.type("#signupPassword", value);
 });
 
-When("I fill in login email with {string}", async value => {
-  await ensureLoginTab();
-  await page.waitForSelector("#loginEmail", { visible: true, timeout: 10000 });
+When("I fill in login email with {string}", async (value) => {
   await page.$eval("#loginEmail", el => (el.value = ""));
   await page.type("#loginEmail", value);
 });
 
-When("I fill in login password with {string}", async value => {
-  await ensureLoginTab();
-  await page.waitForSelector("#loginPassword", { visible: true, timeout: 10000 });
+When("I fill in login password with {string}", async (value) => {
   await page.$eval("#loginPassword", el => (el.value = ""));
   await page.type("#loginPassword", value);
 });
 
 When("I click the Sign Up button", async () => {
   await page.click("#signupBtn");
-  await delay(800);
+  await delay(600);
 });
 
 When("I click the Log In button", async () => {
-  await ensureLoginTab();
   await page.click("#loginBtn");
-  await delay(800);
+  await delay(600);
 });
 
 When("I click the Log Out button", async () => {
-  await logout();
+  await page.click("#logoutBtn");
+  await page.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
 });
 
 When("I click the Send button", async () => {
-  await page.waitForSelector("#sendBtn", { visible: true, timeout: 10000 });
   await page.click("#sendBtn");
-  await delay(300);
+  await delay(600);
 });
 
 When("I click Save Settings", async () => {
   page.once("dialog", async d => await d.accept());
-  await page.waitForSelector("#saveSettingsBtn", { visible: true, timeout: 10000 });
   await page.click("#saveSettingsBtn");
-  await delay(600);
+  await delay(400);
 });
 
-When("I type {string} into the prompt box", async text => {
-  await page.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
-  await page.click("#promptInput", { clickCount: 3 });
-  await page.keyboard.press("Backspace");
+When("I type {string} into the prompt box", async (text) => {
+  await page.$eval("#promptInput", el => (el.value = ""));
   await page.type("#promptInput", text);
 });
 
 When("I leave the prompt box empty", async () => {
-  await page.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
   await page.$eval("#promptInput", el => (el.value = ""));
 });
 
 When("I enable the Shorten response toggle", async () => {
-  await page.waitForSelector("#shortenToggle", { visible: true, timeout: 10000 });
   const checked = await page.$eval("#shortenToggle", el => el.checked);
-  if (!checked) {
-    await page.click("#shortenToggle");
-  }
+  if (!checked) await page.click("#shortenToggle");
 });
 
-When("I set max words to {string}", async value => {
-  await page.waitForSelector("#wordLimit", { visible: true, timeout: 10000 });
-  await page.click("#wordLimit", { clickCount: 3 });
-  await page.keyboard.press("Backspace");
+When("I set max words to {string}", async (value) => {
+  await page.$eval("#wordLimit", el => (el.value = ""));
   await page.type("#wordLimit", value);
 });
 
 When("I click the Bookmark button on the response card", async () => {
-  await bookmarkCurrentConversation();
+  await page.waitForSelector(".responseActions button");
+  await page.click(".responseActions button");
+  await delay(500);
 });
 
 When("I click the Delete button for that conversation", async () => {
-  await page.waitForSelector("#threadDeleteBtn", { visible: true, timeout: 10000 });
-  page.once("dialog", async d => await d.dismiss());
-  await page.click("#threadDeleteBtn");
+  await page.waitForSelector("#chatList li");
+  // Delete button is the last button in the list item
+  const deleteBtn = await page.$('#chatList li button:last-child');
+  page.once("dialog", async d => {
+    // stored for confirm/dismiss steps — intercepted in Then steps
+  });
+  await deleteBtn.click();
   await delay(300);
 });
 
 When("I confirm the confirmation dialog", async () => {
-  await page.waitForSelector("#threadDeleteBtn", { visible: true, timeout: 10000 });
   page.once("dialog", async d => await d.accept());
-  await page.click("#threadDeleteBtn");
+  const deleteBtn = await page.$('#chatList li button:last-child');
+  if (deleteBtn) {
+    await deleteBtn.click();
+  }
   await delay(700);
 });
 
 When("I dismiss the confirmation dialog", async () => {
-  await page.waitForSelector("#threadDeleteBtn", { visible: true, timeout: 10000 });
   page.once("dialog", async d => await d.dismiss());
-  await page.click("#threadDeleteBtn");
+  const deleteBtn = await page.$('#chatList li button:last-child');
+  if (deleteBtn) {
+    await deleteBtn.click();
+  }
   await delay(400);
 });
 
 When("I click Open next to it in the Bookmarked Chats sidebar", async () => {
-  await waitForBookmarkEntry();
-  await page.waitForSelector("#bookmarkList button", { visible: true, timeout: 10000 });
-  await page.click("#bookmarkList button");
+  await page.waitForSelector("#bookmarkList li button");
+  await page.click("#bookmarkList li button");
   await delay(500);
 });
 
-Then("I should see the heading {string}", async text => {
+// ── Then steps ────────────────────────────────────────────────────────────────
+
+Then("I should see the heading {string}", async (text) => {
   const heading = await page.$eval("h1", el => el.textContent.trim());
-  assert.ok(heading.includes(text), `Expected h1 to contain "${text}", got "${heading}"`);
+  assert.ok(
+    heading.includes(text),
+    `Expected h1 to contain "${text}", got "${heading}"`
+  );
 });
 
 Then("I should see a signup form", async () => {
@@ -385,269 +256,330 @@ Then("I should see a login form", async () => {
 });
 
 Then("I should be on the app page", async () => {
-  await waitForApp();
-  assert.ok(
-    page.url().includes("index.html") || page.url().includes("/app") || page.url() === `${BASE}/`,
-    `Expected app page, got ${page.url()}`
-  );
+  await page.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
+  assert.ok(page.url().includes("/app"), `Expected /app in URL, got ${page.url()}`);
 });
 
 Then("I should be on the landing page", async () => {
-  await page.waitForSelector("#signupBtn", { visible: true, timeout: 10000 });
-  assert.ok(!page.url().includes("/app") || page.url() === `${BASE}/`, `Expected landing page, got ${page.url()}`);
+  assert.ok(
+    !page.url().includes("/app"),
+    `Expected to be on landing page, got ${page.url()}`
+  );
 });
 
-Then("I should see {string}", async text => {
+Then("I should see {string}", async (text) => {
   const content = await page.content();
   assert.ok(content.includes(text), `Page does not contain "${text}"`);
 });
 
-Then("I should see the auth error {string}", async expected => {
-  await page.waitForSelector("#authMessage", { timeout: 10000 });
+Then("I should see the auth error {string}", async (expected) => {
+  await page.waitForSelector("#authMessage");
   const msg = await page.$eval("#authMessage", el => el.textContent.trim());
   assert.strictEqual(msg, expected, `Expected error "${expected}", got "${msg}"`);
 });
 
 Then("a response card should appear on the page", async () => {
-  await waitForResponse();
-  const threadText = await page.$eval("#threadMessages", el => el.innerText.trim());
-  assert.ok(threadText.length > 0, "Assistant response not found");
+  await page.waitForSelector(".responseCard", { timeout: 5000 });
+  const card = await page.$(".responseCard");
+  assert.ok(card, "Response card not found");
 });
 
 Then("the response card should contain study-related content", async () => {
-  await waitForResponse();
-  const text = await page.$eval("#threadMessages", el => el.textContent.toLowerCase());
+  const text = await page.$eval(".responseCard", el => el.textContent.toLowerCase());
   const relevant = text.includes("study") || text.includes("exam") || text.includes("concept");
-  assert.ok(relevant, `Response did not contain study-related text: "${text}"`);
+  assert.ok(relevant, `Response card did not contain study-related text: "${text}"`);
 });
 
 Then("no response card should appear", async () => {
   await delay(500);
-  const thread = await page.$("#threadMessages");
-  const text = thread ? await page.$eval("#threadMessages", el => el.innerText.trim()) : "";
-  assert.ok(!text, "Assistant response should not have been created");
+  const cards = await page.$$(".responseCard");
+  assert.strictEqual(cards.length, 0, "Response card should not have been created");
 });
 
 Then("the Chats sidebar should contain a new entry", async () => {
-  await waitForSidebarEntry();
-  const text = await page.$eval("#chatList", el => el.innerText.trim());
-  assert.ok(text.length > 0, "Chat list should not be empty");
+  await page.waitForFunction(
+    () => document.querySelector("#chatList li") !== null,
+    { timeout: 5000 }
+  );
+  const items = await page.$$("#chatList li");
+  assert.ok(items.length > 0, "Chat list should not be empty");
 });
 
-Then("the response on the card should contain no more than {int} words", async max => {
-  await waitForResponse();
-
-  const threadText = await page.$eval("#threadMessages", el => el.innerText.trim());
-  const words = threadText.split(/\s+/).filter(Boolean);
-  assert.ok(words.length > 0, "No response text found");
-  assert.ok(words.length <= max, `Expected ≤ ${max} words, got ${words.length}: "${threadText}"`);
+Then("the response on the card should contain no more than {int} words", async (max) => {
+  await page.waitForSelector(".responseCard");
+  const responseEl = await page.$(".responseCard p:nth-child(3)");
+  const text = await page.evaluate(el => el.textContent, responseEl);
+  const words = text.replace(/^Response:\s*/i, "").trim().split(/\s+/);
+  assert.ok(
+    words.length <= max,
+    `Expected ≤ ${max} words, got ${words.length}: "${text}"`
+  );
 });
 
 Then("the conversation should appear in the Bookmarked Chats sidebar", async () => {
-  await waitForBookmarkEntry();
-  const text = await page.$eval("#bookmarkList", el => el.innerText.trim());
-  assert.ok(text.length > 0, "Bookmarked Chats list should not be empty");
+  await page.waitForFunction(
+    () => document.querySelector("#bookmarkList li") !== null,
+    { timeout: 5000 }
+  );
+  const items = await page.$$("#bookmarkList li");
+  assert.ok(items.length > 0, "Bookmarked Chats list should not be empty");
 });
 
 Then("the conversation should no longer appear in the Chats sidebar", async () => {
-  await delay(800);
-  const threadDeleteBtn = await page.$("#threadDeleteBtn");
-  const heading = await page.$("#mainHeading")
-    ? await page.$eval("#mainHeading", el => el.textContent.trim())
-    : "";
-  assert.ok(!threadDeleteBtn || heading.includes("How can I help"), "Conversation should be cleared after deletion");
+  await page.waitForFunction(
+    () => document.querySelector("#chatList li") === null,
+    { timeout: 5000 }
+  ).catch(() => {});
+  const items = await page.$$("#chatList li");
+  assert.strictEqual(items.length, 0, "Chat list should be empty after deletion");
 });
 
 Then("the conversation should still appear in the Chats sidebar", async () => {
-  await waitForSidebarEntry();
-  const text = await page.$eval("#chatList", el => el.innerText.trim());
-  assert.ok(text.length > 0, "Conversation should still be present");
+  const items = await page.$$("#chatList li");
+  assert.ok(items.length > 0, "Conversation should still be present");
 });
 
 Then("the response card should display the prompt and response", async () => {
-  await waitForResponse();
-  const threadText = await page.$eval("#threadMessages", el => el.textContent.trim());
-  assert.ok(threadText.length > 0, "Expected thread to show prompt and response");
+  await page.waitForSelector(".responseCard");
+  const text = await page.$eval(".responseCard", el => el.textContent);
+  assert.ok(
+    text.includes("Prompt:") && text.includes("Response:"),
+    "Card should show both prompt and response sections"
+  );
 });
 
-// Older feature files
+// ── Iteration 3 Step Definitions ──────────────────────────────────────────────
 
-Given("the user is on the PistachioAI chat page", async () => {
-  await goHome();
-
-  const promptExists = await page.$("#promptInput");
-  if (promptExists) {
-    await page.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
-    return;
-  }
-
-  const user = uniqueUser("chatuser");
+Given("I am logged in with a conversation about {string}", async (topic) => {
+  const user = uniqueUser("topicuser");
   await signUp(user.username, user.email, user.password);
+  await createConversation(`Tell me about ${topic}`);
 });
 
-When("the user types {string} into the prompt box", async text => {
-  await page.waitForSelector("#promptInput", { visible: true, timeout: 10000 });
-  await page.click("#promptInput", { clickCount: 3 });
-  await page.keyboard.press("Backspace");
-  await page.type("#promptInput", text);
+// ── Rename ────────────────────────────────────────────────────────────────────
+
+When("I rename the conversation to {string}", async (newTitle) => {
+  await page.waitForSelector(".rename-btn", { visible: true, timeout: 10000 });
+  await page.evaluate((title) => {
+    window._origPrompt = window.prompt;
+    window.prompt = () => title;
+  }, newTitle);
+  await page.click(".rename-btn");
+  await delay(1000);
+  await page.evaluate(() => { window.prompt = window._origPrompt; });
 });
 
-When("the user clicks the send button", async () => {
-  await page.waitForSelector("#sendBtn", { visible: true, timeout: 10000 });
-  await page.click("#sendBtn");
+When("I cancel the rename dialog", async () => {
+  await page.waitForSelector(".rename-btn", { visible: true, timeout: 10000 });
+  await page.evaluate(() => {
+    window._origPrompt = window.prompt;
+    window.prompt = () => null;
+  });
+  await page.click(".rename-btn");
+  await delay(600);
+  await page.evaluate(() => { window.prompt = window._origPrompt; });
 });
 
-Then("a loading icon should be visible", async () => {
-  await page.waitForSelector("#loadingBubble", { visible: true, timeout: 10000 });
+Then("the sidebar should show the title {string}", async (expectedTitle) => {
+  await delay(500);
+  const titles = await page.$$eval("#chatList li .chat-title", els => els.map(e => e.textContent.trim()));
+  assert.ok(
+    titles.some(t => t.includes(expectedTitle)),
+    `Expected title "${expectedTitle}" in sidebar, got: ${titles.join(", ")}`
+  );
 });
 
-Then("a response should be displayed on the screen", async () => {
-  await waitForResponse();
-  const text = await page.$eval("#threadMessages", el => el.innerText.trim());
-  assert.ok(text.length > 0, "No assistant response found on screen");
+Then("the conversation title should remain unchanged", async () => {
+  await delay(500);
+  const items = await page.$$("#chatList li");
+  assert.ok(items.length > 0, "Expected at least one conversation in the sidebar");
 });
 
-Given("the user has opened an existing conversation from the sidebar", async () => {
-  await createConversation("give me one short sentence");
-  await waitForSidebarEntry();
+// ── Export ────────────────────────────────────────────────────────────────────
 
-  const firstConversation = await page.$("#chatList .chat-item, #chatList li, #chatList button, #chatList > *");
-  assert.ok(firstConversation, "No existing conversation found in sidebar");
-  await firstConversation.click();
+When("I request the export for that conversation", async () => {
+  const convId = await page.$eval(
+    ".icon-btn[title='Export']",
+    el => { const m = el.getAttribute("onclick").match(/\d+/); return m ? m[0] : null; }
+  );
+  assert.ok(convId, "Could not find export button with conversation id");
 
-  await page.waitForSelector("#threadMessages", { visible: true, timeout: 10000 });
+  const result = await page.evaluate(async (id) => {
+    const res = await fetch(`/api/conversations/${id}/export`);
+    const body = await res.text();
+    return { status: res.status, contentType: res.headers.get("content-type"), body };
+  }, convId);
+
+  await page.evaluate((r) => { window._exportResult = r; }, result);
 });
 
-Then("the new message should be appended to the existing conversation", async () => {
-  await waitForResponse();
-  const threadText = await page.$eval("#threadMessages", el => el.innerText.toLowerCase());
-  assert.ok(threadText.length > 0, "Expected appended conversation content");
+Then("the response should be a text file with HTTP 200", async () => {
+  const result = await page.evaluate(() => window._exportResult);
+  assert.strictEqual(result.status, 200, `Expected HTTP 200, got ${result.status}`);
+  assert.ok(result.contentType && result.contentType.includes("text"),
+    `Expected text content-type, got ${result.contentType}`);
 });
 
-Then("a new conversation should not be created", async () => {
-  const text = await page.$eval("#chatList", el => el.innerText.trim());
-  assert.ok(text.length > 0, "Expected sidebar to still contain conversation items");
+Then("the exported file should contain message labels", async () => {
+  const result = await page.evaluate(() => window._exportResult);
+  assert.ok(
+    result.body.includes("You:") || result.body.includes("PistachioAI:"),
+    "Exported file missing message labels"
+  );
 });
 
-Given("the UI is currently in light mode", async () => {
-  await page.waitForSelector("#themeToggleBtn", { visible: true, timeout: 10000 });
-  const isDark = await page.evaluate(() => document.body.classList.contains("dark"));
-  if (isDark) {
-    await page.click("#themeToggleBtn");
-    await page.waitForFunction(() => !document.body.classList.contains("dark"), { timeout: 5000 });
-  }
+// ── Delete All ────────────────────────────────────────────────────────────────
+
+When("I click the Delete All Chats button and confirm", async () => {
+  await page.waitForSelector("#deleteAllChatsBtn", { visible: true, timeout: 10000 });
+  await page.evaluate(() => { window.confirm = () => true; });
+  await page.click("#deleteAllChatsBtn");
+  await delay(1000);
 });
 
-Given("the UI is currently in dark mode", async () => {
-  await page.waitForSelector("#themeToggleBtn", { visible: true, timeout: 10000 });
-  const isDark = await page.evaluate(() => document.body.classList.contains("dark"));
-  if (!isDark) {
-    await page.click("#themeToggleBtn");
-    await page.waitForFunction(() => document.body.classList.contains("dark"), { timeout: 5000 });
-  }
+Then("the Chats sidebar should be empty", async () => {
+  const items = await page.$$("#chatList li");
+  assert.strictEqual(items.length, 0, `Expected empty sidebar, found ${items.length} items`);
 });
 
-When("the user clicks the dark/light mode toggle button", async () => {
-  await page.waitForSelector("#themeToggleBtn", { visible: true, timeout: 10000 });
-  await page.click("#themeToggleBtn");
+Then("the thread section should be hidden", async () => {
+  const visible = await page.$eval(
+    "#threadSection",
+    el => el.style.display !== "none"
+  ).catch(() => false);
+  assert.ok(!visible, "Thread section should be hidden");
 });
 
-Then("the UI theme should change to dark mode", async () => {
-  await page.waitForFunction(() => document.body.classList.contains("dark"), { timeout: 5000 });
+Then("the Delete All Chats button should be visible", async () => {
+  const btn = await page.$("#deleteAllChatsBtn");
+  assert.ok(btn !== null, "Delete All Chats button not found");
 });
 
-Then("the UI theme should change to light mode", async () => {
-  await page.waitForFunction(() => !document.body.classList.contains("dark"), { timeout: 5000 });
+// ── Search ────────────────────────────────────────────────────────────────────
+
+Then("no search results should be displayed", async () => {
+  await delay(800);
+  const results = await page.$$(".search-result-card");
+  assert.strictEqual(results.length, 0, "Expected no search results for nonsense keyword");
+  await page.click("#closeSearchBtn").catch(() => {});
 });
 
-When("the response has finished loading", async () => {
-  await waitForResponse();
+// ── Cloud Models ──────────────────────────────────────────────────────────────
+
+Then("the Gemini button should be visible", async () => {
+  await page.waitForSelector("#geminiBtn", { timeout: 8000 });
+  const btn = await page.$("#geminiBtn");
+  assert.ok(btn !== null, "Gemini button not found");
 });
 
-Then("the conversation should appear in the chat history sidebar", async () => {
-  await waitForSidebarEntry();
-  const text = await page.$eval("#chatList", el => el.innerText.trim());
-  assert.ok(text.length > 0, "No conversations found in the sidebar");
+When("I click the Gemini button", async () => {
+  await page.waitForSelector("#geminiBtn", { visible: true, timeout: 8000 });
+  await page.click("#geminiBtn");
+  await delay(500);
 });
 
-Given("multiple conversations exist in the sidebar", async () => {
-  await createConversation("France test one");
-  await createConversation("France test two");
-  await waitForSidebarEntry();
+When("I click the Gemini button again", async () => {
+  await page.click("#geminiBtn");
+  await delay(400);
 });
 
-When("the user types {string} into the search bar", async keyword => {
-  await page.waitForSelector("#openSearchBtn", { visible: true, timeout: 10000 });
-  await page.click("#openSearchBtn");
-
-  await page.waitForSelector("#searchInput", { visible: true, timeout: 10000 });
-  await page.click("#searchInput", { clickCount: 3 });
-  await page.keyboard.press("Backspace");
-  await page.type("#searchInput", keyword);
-
-  await page.click("#searchBtn");
+Then("the result panel should open with a Gemini response", async () => {
+  await page.waitForFunction(
+    () => {
+      const panel = document.getElementById("modelResultPanel");
+      return panel && !panel.classList.contains("hidden");
+    },
+    { timeout: 10000 }
+  );
+  const title = await page.$eval("#modelResultTitle", el => el.textContent.trim());
+  assert.ok(title.includes("Gemini"), `Expected Gemini in panel title, got "${title}"`);
+  const body = await page.$eval("#modelResultBody", el => el.textContent.trim());
+  assert.ok(body.length > 0, "Gemini result panel body is empty");
 });
 
-Then("only conversations containing {string} should be displayed in the sidebar", async keyword => {
-  await page.waitForFunction(() => {
-    const results = document.querySelector("#searchResults");
-    return results && results.innerText.trim().length > 0;
-  }, { timeout: 10000 });
-
-  const resultsText = await page.$eval("#searchResults", el => el.innerText.toLowerCase());
-  assert.ok(resultsText.includes(keyword.toLowerCase()), `Search results do not contain "${keyword}"`);
+Then("the Groq button should be visible", async () => {
+  await page.waitForSelector("#groqBtn", { timeout: 8000 });
+  const btn = await page.$("#groqBtn");
+  assert.ok(btn !== null, "Groq button not found");
 });
 
-Given("the user has searched for {string} in the search bar", async keyword => {
-  await goHome();
-
-  const promptExists = await page.$("#promptInput");
-  if (!promptExists) {
-    const user = uniqueUser("searchuser");
-    await signUp(user.username, user.email, user.password);
-  }
-
-  await createConversation("France searchable conversation");
-  await page.click("#openSearchBtn");
-  await page.waitForSelector("#searchInput", { visible: true, timeout: 10000 });
-  await page.click("#searchInput", { clickCount: 3 });
-  await page.keyboard.press("Backspace");
-  await page.type("#searchInput", keyword);
-  await page.click("#searchBtn");
+When("I click the Groq button", async () => {
+  await page.waitForSelector("#groqBtn", { visible: true, timeout: 8000 });
+  await page.click("#groqBtn");
+  await delay(500);
 });
 
-Given("matching conversations are displayed", async () => {
-  await page.waitForFunction(() => {
-    const results = document.querySelector("#searchResults");
-    return results && results.innerText.trim().length > 0;
-  }, { timeout: 10000 });
+Then("the result panel should open with a Groq response", async () => {
+  await page.waitForFunction(
+    () => {
+      const panel = document.getElementById("modelResultPanel");
+      return panel && !panel.classList.contains("hidden");
+    },
+    { timeout: 10000 }
+  );
+  const title = await page.$eval("#modelResultTitle", el => el.textContent.trim());
+  assert.ok(title.includes("Groq"), `Expected Groq in panel title, got "${title}"`);
+  const body = await page.$eval("#modelResultBody", el => el.textContent.trim());
+  assert.ok(body.length > 0, "Groq result panel body is empty");
 });
 
-When("the user clicks on one of the search results", async () => {
-  const firstResult = await page.$(".search-result-card, #searchResults > *, #searchResults button, #searchResults li");
-  assert.ok(firstResult, "No search result to click");
-  await firstResult.click();
+Then("the result panel should be hidden", async () => {
+  const hidden = await page.$eval(
+    "#modelResultPanel",
+    el => el.classList.contains("hidden")
+  );
+  assert.ok(hidden, "Result panel should be hidden");
 });
 
-Then("that conversation should be loaded and displayed", async () => {
-  await page.waitForSelector("#threadMessages", { visible: true, timeout: 10000 });
-  const text = await page.$eval("#threadMessages", el => el.innerText.trim());
-  assert.ok(text.length > 0, "No conversation loaded after clicking search result");
+// ── Suggest a Change ──────────────────────────────────────────────────────────
+
+Then("the Suggest a Change button should be visible", async () => {
+  const btn = await page.$("#openSuggestBtn");
+  assert.ok(btn !== null, "Suggest a Change button not found");
 });
 
-Given("at least one past conversation exists in the sidebar", async () => {
-  await createConversation("give me one short sentence");
-  await waitForSidebarEntry();
+When("I click the Suggest a Change button", async () => {
+  await page.waitForSelector("#openSuggestBtn", { visible: true, timeout: 8000 });
+  await page.click("#openSuggestBtn");
+  await delay(400);
 });
 
-When("the user clicks on a conversation in the sidebar", async () => {
-  const firstConversation = await page.$("#chatList .chat-item, #chatList li, #chatList button, #chatList > *");
-  assert.ok(firstConversation, "No conversation found in sidebar");
-  await firstConversation.click();
+Then("the suggest modal should be open", async () => {
+  const visible = await page.$eval("#suggestOverlay", el => !el.classList.contains("hidden"));
+  assert.ok(visible, "Suggest modal is not open");
 });
 
-Then("that conversation's messages should be loaded and displayed", async () => {
-  await page.waitForSelector("#threadMessages", { visible: true, timeout: 10000 });
-  const threadText = await page.$eval("#threadMessages", el => el.innerText.trim());
-  assert.ok(threadText.length > 0, "No messages loaded after clicking a past conversation");
+Then("the file dropdown should only contain public files", async () => {
+  const options = await page.$$eval("#suggestFile option", opts => opts.map(o => o.value));
+  assert.ok(options.length > 0, "File dropdown is empty");
+  assert.ok(
+    options.every(o => o.startsWith("public/")),
+    `Non-public file found in dropdown: ${options.join(", ")}`
+  );
+});
+
+Then("the instruction textarea should be visible", async () => {
+  const textarea = await page.$("#suggestInstruction");
+  assert.ok(textarea !== null, "Instruction textarea not found");
+});
+
+When("I submit the suggest form without an instruction", async () => {
+  await page.$eval("#suggestInstruction", el => { el.value = ""; });
+  await page.click("#suggestSubmitBtn");
+  await delay(500);
+});
+
+Then("a validation error should be shown", async () => {
+  const status = await page.$eval("#suggestStatus", el => el.textContent.trim());
+  assert.ok(status.length > 0, "Expected a validation error message");
+});
+
+When("I click the Cancel button in the suggest modal", async () => {
+  await page.click("#suggestCancelBtn");
+  await delay(400);
+});
+
+Then("the suggest modal should be closed", async () => {
+  const hidden = await page.$eval("#suggestOverlay", el => el.classList.contains("hidden"));
+  assert.ok(hidden, "Suggest modal should be closed");
 });

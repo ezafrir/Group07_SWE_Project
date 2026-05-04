@@ -185,7 +185,12 @@ function assert(condition, message) {
 // ── 6. Tests ──────────────────────────────────────────────────────────────────
 async function runTests() {
   await startServer();
-  browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox"] });
+  browser = await puppeteer.launch({
+  headless: false,              // opens Chrome
+  slowMo: 40,                   // smoother for demo
+  defaultViewport: null,        // fullscreen
+  args: ["--start-maximized", "--no-sandbox"]
+});
 
   console.log("\nPistachioAI — End-to-End Tests\n");
 
@@ -869,7 +874,10 @@ runTests()
     process.exitCode = 1;
   })
   .finally(async () => {
-    if (browser) await browser.close();
+    if (browser) {
+      await new Promise(r => setTimeout(r, 10000)); // keep open 10s
+      await browser.close();
+    }
     await stopServer();
     if (results.failed > 0) process.exitCode = 1;
   });

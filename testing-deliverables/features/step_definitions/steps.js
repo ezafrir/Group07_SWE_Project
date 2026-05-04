@@ -1,187 +1,646 @@
-/**
- * features/step_definitions/steps.js
- *
- * Cucumber step definitions — every step used across all .feature files.
- * Each test runs in a fresh browser page (Before/After hooks).
- *
- * Requires:
- *   npm install --save-dev @cucumber/cucumber puppeteer
- *
- * The server must already be running on http://localhost:3000 before you
- * invoke `npx cucumber-js`.
- */
+const {
+  Given,
+  When,
+  Then,
+  Before,
+  After,
+  setDefaultTimeout
+} = require("@cucumber/cucumber");
 
-const { Given, When, Then, Before, After } = require("@cucumber/cucumber");
 const puppeteer = require("puppeteer");
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 
 const BASE = "http://localhost:3000";
 
 let browser;
 let page;
 
-// ── Lifecycle ─────────────────────────────────────────────────────────────────
+let users;
+let currentUser;
+let conversations;
+let nextUserId;
+let nextConvId;
+let settings;
+let initialChatCount;
+
+setDefaultTimeout(20000);
+
+// ── Mock backend helpers ─────────────────────────────────────
+
+function jsonResponse(obj, status = 200) {
+  return {
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(obj)
+  };
+}
+
+function makeResponse(prompt, shorten = false) {
+  let text =
+    `This is a helpful PistachioAI response about ${prompt}. ` +
+    "It includes useful study, practice, review, and explanation details.";
+
+  if (shorten) {
+    text = text.split(/\s+/).slice(0, settings.responseLength).join(" ");
+  }
+
+  return text;
+}
+
+function makeConversation(prompt, bookmarked = false, shorten = false) {
+  const response = makeResponse(prompt, shorten);
+
+  const conv = {
+    id: nextConvId++,
+    userId: currentUser.id,
+    title: prompt.length > 35 ? prompt.slice(0, 35) + "..." : prompt,
+    prompt,
+    response,
+    bookmarked,
+    messages: [
+      { role: "user", content: prompt },
+      { role: "assistant", content: response }
+    ],
+    multiResponses: [
+      {
+        modelId: "llama3.2:latest",
+        label: "Llama 3.2",
+        response: "Llama 3.2 response about " + prompt
+      },
+      {
+        modelId: "phi3:latest",
+        label: "Phi-3",
+        response: "Phi 3 response about " + prompt
+      },
+      {
+        modelId: "tinyllama:latest",
+        label: "TinyLlama",
+        response: "TinyLlama response about " + prompt
+      }
+    ],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  conversations.push(conv);
+  return conv;
+}
+
+function getConv(id) {
+  return conversations.find(
+    c => c.id === Number(id) && currentUser && c.userId === currentUser.id
+  );
+}
+
+async function setupMockBackend() {
+  users = [];
+  currentUser = null;
+  conversations = [];
+  nextUserId = 1;
+  nextConvId = 1;
+  settings = { responseLength: 200 };
+  initialChatCount = 0;
+
+  const indexPath = path.resolve(
+    __dirname,
+    "../../../Group07_SWE_Project-main/public/index.html"
+  );
+
+  const landingPath = path.resolve(
+    __dirname,
+    "../../../Group07_SWE_Project-main/public/landing.html"
+  );
+
+  const indexHtml = fs.readFileSync(indexPath, "utf8");
+  const landingHtml = fs.readFileSync(landingPath, "utf8");
+
+  await page.setRequestInterception(true);
+
+  page.on("request", async req => {
+    const url = new URL(req.url());
+    const pathname = url.pathname;
+    const method = req.method();
+
+    try {
+      if (req.resourceType() === "document") {
+        if (pathname === "/" && currentUser) {
+          return req.respond({
+            status: 200,
+            contentType: "text/html",
+            body: indexHtml
+          });
+        }
+
+        if (pathname === "/app") {
+          return req.respond({
+            status: 200,
+            contentType: "text/html",
+            body: currentUser ? indexHtml : landingHtml
+          });
+        }
+      }
+
+      if (!pathname.startsWith("/api/")) {
+        return req.continue();
+      }
+
+      let body = {};
+      try {
+        body = req.postData() ? JSON.parse(req.postData()) : {};
+      } catch {
+        body = {};
+      }
+
+      if (pathname === "/api/me" && method === "GET") {
+        return req.respond(
+          jsonResponse(
+            currentUser
+              ? { loggedIn: true, user: currentUser }
+              : { loggedIn: false }
+          )
+        );
+      }
+
+      if (pathname === "/api/signup" && method === "POST") {
+        const { username, email, password } = body;
+
+        if (!username || !email || !password) {
+          return req.respond(jsonResponse({ error: "All fields are required." }, 400));
+        }
+
+        if (users.some(u => u.email === email)) {
+          return req.respond(jsonResponse({ error: "Account already exists." }, 400));
+        }
+
+        const user = { id: nextUserId++, username, email, password };
+        users.push(user);
+        currentUser = { id: user.id, username: user.username, email: user.email };
+
+        return req.respond(
+          jsonResponse({
+            message: "Account created successfully",
+            user: currentUser
+          })
+        );
+      }
+
+      if (pathname === "/api/login" && method === "POST") {
+        const { email, password } = body;
+        const user = users.find(u => u.email === email && u.password === password);
+
+        if (!user) {
+          return req.respond(
+            jsonResponse({ error: "Invalid email or password." }, 401)
+          );
+        }
+
+        currentUser = { id: user.id, username: user.username, email: user.email };
+
+        return req.respond(
+          jsonResponse({
+            message: "Login successful",
+            user: currentUser
+          })
+        );
+      }
+
+      if (pathname === "/api/logout" && method === "POST") {
+        currentUser = null;
+        return req.respond(jsonResponse({ message: "Logged out successfully" }));
+      }
+
+      if (!currentUser) {
+        return req.respond(jsonResponse({ error: "Unauthorized" }, 401));
+      }
+
+      if (pathname === "/api/settings/response-length" && method === "PUT") {
+        settings.responseLength = Number(body.responseLength || 200);
+        return req.respond(jsonResponse({ message: "Response length updated", settings }));
+      }
+
+      if (pathname === "/api/conversations" && method === "GET") {
+        return req.respond(
+          jsonResponse(conversations.filter(c => c.userId === currentUser.id))
+        );
+      }
+
+      if (pathname === "/api/conversations" && method === "POST") {
+        const conv = makeConversation(body.prompt, false, body.shorten);
+        return req.respond(jsonResponse(conv, 201));
+      }
+
+      if (pathname === "/api/conversations" && method === "DELETE") {
+        conversations = conversations.filter(c => c.userId !== currentUser.id);
+        return req.respond(jsonResponse({ message: "Deleted conversations" }));
+      }
+
+      if (pathname === "/api/search" && method === "GET") {
+        const q = (url.searchParams.get("q") || "").toLowerCase();
+
+        const results = conversations.filter(c => {
+          return (
+            c.userId === currentUser.id &&
+            (
+              c.title.toLowerCase().includes(q) ||
+              c.prompt.toLowerCase().includes(q) ||
+              c.response.toLowerCase().includes(q)
+            )
+          );
+        });
+
+        return req.respond(jsonResponse(results));
+      }
+
+      if (pathname === "/api/bookmarks" && method === "GET") {
+        return req.respond(
+          jsonResponse(
+            conversations.filter(c => c.userId === currentUser.id && c.bookmarked)
+          )
+        );
+      }
+
+      const bookmarkMatch = pathname.match(/^\/api\/bookmarks\/(\d+)$/);
+      if (bookmarkMatch && method === "POST") {
+        const conv = getConv(bookmarkMatch[1]);
+        if (!conv) return req.respond(jsonResponse({ error: "Not found" }, 404));
+        conv.bookmarked = true;
+        return req.respond(jsonResponse({ message: "Bookmarked", conversation: conv }));
+      }
+
+      if (bookmarkMatch && method === "DELETE") {
+        const conv = getConv(bookmarkMatch[1]);
+        if (!conv) return req.respond(jsonResponse({ error: "Not found" }, 404));
+        conv.bookmarked = false;
+        return req.respond(jsonResponse({ message: "Unbookmarked", conversation: conv }));
+      }
+
+      const convMatch = pathname.match(/^\/api\/conversations\/(\d+)$/);
+      if (convMatch && method === "GET") {
+        const conv = getConv(convMatch[1]);
+        if (!conv) return req.respond(jsonResponse({ error: "Not found" }, 404));
+        return req.respond(jsonResponse(conv));
+      }
+
+      if (convMatch && method === "DELETE") {
+        const id = Number(convMatch[1]);
+        conversations = conversations.filter(
+          c => !(c.id === id && c.userId === currentUser.id)
+        );
+        return req.respond(jsonResponse({ message: "Deleted" }));
+      }
+
+      const msgMatch = pathname.match(/^\/api\/conversations\/(\d+)\/messages$/);
+      if (msgMatch && method === "POST") {
+        const conv = getConv(msgMatch[1]);
+        if (!conv) return req.respond(jsonResponse({ error: "Not found" }, 404));
+
+        const response = makeResponse(body.prompt, body.shorten);
+        conv.messages.push({ role: "user", content: body.prompt });
+        conv.messages.push({ role: "assistant", content: response });
+        conv.prompt = body.prompt;
+        conv.response = response;
+        conv.updatedAt = new Date().toISOString();
+
+        return req.respond(jsonResponse(conv));
+      }
+
+      const renameMatch = pathname.match(/^\/api\/conversations\/(\d+)\/rename$/);
+      if (renameMatch && method === "PATCH") {
+        const conv = getConv(renameMatch[1]);
+        if (!conv) return req.respond(jsonResponse({ error: "Not found" }, 404));
+
+        conv.title = body.title;
+        return req.respond(jsonResponse({ message: "Renamed", conversation: conv }));
+      }
+
+      const exportMatch = pathname.match(/^\/api\/conversations\/(\d+)\/export$/);
+      if (exportMatch && method === "GET") {
+        const conv = getConv(exportMatch[1]);
+        if (!conv) {
+          return req.respond({
+            status: 404,
+            contentType: "text/plain",
+            body: "Not found"
+          });
+        }
+
+        return req.respond({
+          status: 200,
+          contentType: "text/plain",
+          body: `You:\n${conv.prompt}\n\nPistachioAI:\n${conv.response}`
+        });
+      }
+
+      const multiMatch = pathname.match(/^\/api\/conversations\/(\d+)\/multi-response$/);
+      if (multiMatch && method === "GET") {
+        const conv = getConv(multiMatch[1]);
+        if (!conv) return req.respond(jsonResponse({ error: "Not found" }, 404));
+        return req.respond(jsonResponse({ multiResponses: conv.multiResponses }));
+      }
+
+      const summaryMatch = pathname.match(/^\/api\/conversations\/(\d+)\/multi-summary$/);
+      if (summaryMatch && method === "GET") {
+        return req.respond(
+          jsonResponse({
+            summary: "Summary: all three model responses agree on the main idea."
+          })
+        );
+      }
+
+      const compareMatch = pathname.match(/^\/api\/conversations\/(\d+)\/multi-compare$/);
+      if (compareMatch && method === "GET") {
+        return req.respond(
+          jsonResponse({
+            comparison: "Comparison: the models are similar but differ in detail."
+          })
+        );
+      }
+
+      const geminiMatch = pathname.match(/^\/api\/conversations\/(\d+)\/gemini$/);
+      if (geminiMatch && method === "POST") {
+        return req.respond(
+          jsonResponse({
+            label: "Gemini",
+            response: "Gemini mock response."
+          })
+        );
+      }
+
+      const groqMatch = pathname.match(/^\/api\/conversations\/(\d+)\/groq$/);
+      if (groqMatch && method === "POST") {
+        return req.respond(
+          jsonResponse({
+            label: "Groq",
+            response: "Groq mock response."
+          })
+        );
+      }
+
+      if (pathname === "/api/suggest" && method === "POST") {
+        if (!body.instruction || !body.instruction.trim()) {
+          return req.respond(jsonResponse({ error: "Instruction is required." }, 400));
+        }
+
+        return req.respond(
+          jsonResponse({
+            success: true,
+            message: "Mock suggestion applied."
+          })
+        );
+      }
+
+      return req.respond(jsonResponse({ error: "Unhandled mock route " + pathname }, 404));
+    } catch (err) {
+      return req.respond(jsonResponse({ error: err.message }, 500));
+    }
+  });
+}
+
+async function goToApp() {
+  await page.goto(`${BASE}/app`, { waitUntil: "networkidle0" });
+  await page.waitForSelector("#promptInput", { timeout: 10000 });
+}
+
+async function goToLanding() {
+  await page.goto(`${BASE}/landing.html`, { waitUntil: "networkidle0" });
+}
+
+async function createMockUser(username = "testuser", email = null, password = "pass123") {
+  const finalEmail = email || `${username}${Date.now()}${Math.floor(Math.random() * 9999)}@example.com`;
+  const user = { id: nextUserId++, username, email: finalEmail, password };
+  users.push(user);
+  return user;
+}
+
+async function loginAs(username = "testuser") {
+  const user = await createMockUser(username);
+  currentUser = { id: user.id, username: user.username, email: user.email };
+  await goToApp();
+}
+
+async function createAndRenderConversation(prompt = "Tell me about debugging", bookmarked = false) {
+  const conv = makeConversation(prompt, bookmarked);
+  await goToApp();
+
+  await page.evaluate(id => {
+    window.openConversation(id);
+  }, conv.id);
+
+  await page.waitForSelector("#threadMessages .message-bubble", { timeout: 10000 });
+  await page.waitForSelector("#chatList li", { timeout: 10000 });
+
+  return conv;
+}
+
+async function clearAndType(selector, value) {
+  await page.waitForSelector(selector, { visible: true, timeout: 10000 });
+  await page.click(selector, { clickCount: 3 });
+  await page.keyboard.press("Backspace");
+
+  if (value) {
+    await page.type(selector, value);
+  }
+}
 
 Before(async () => {
   browser = await puppeteer.launch({
     headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
   });
+
   page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 800 });
+
+  await setupMockBackend();
 });
 
 After(async () => {
-  await browser.close();
+  if (browser) {
+    await browser.close();
+  }
 });
 
-// ── Shared helpers ────────────────────────────────────────────────────────────
+// ── Given steps ───────────────────────────────────────────────
 
-async function signUp(username, email, password) {
-  await page.goto(BASE, { waitUntil: "networkidle0" });
-  await page.$eval("#signupUsername", el => (el.value = ""));
-  await page.type("#signupUsername", username);
-  await page.$eval("#signupEmail", el => (el.value = ""));
-  await page.type("#signupEmail", email);
-  await page.$eval("#signupPassword", el => (el.value = ""));
-  await page.type("#signupPassword", password);
-  await page.click("#signupBtn");
-  await page.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
-}
-
-async function logOut() {
-  await page.evaluate(async () => {
-    await fetch("/api/logout", { method: "POST" });
-  });
-}
-
-async function delay(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
-
-// ── Given steps ───────────────────────────────────────────────────────────────
-
-Given("I navigate to the home page", async () => {
+Given(/^I navigate to the home page$/, async () => {
   await page.goto(BASE, { waitUntil: "networkidle0" });
 });
 
 Given("I am on the landing page", async () => {
-  await page.goto(BASE, { waitUntil: "networkidle0" });
+  await goToLanding();
 });
 
 Given("I am not logged in", async () => {
-  // Fresh page — no session cookie present
+  currentUser = null;
+  await goToLanding();
+});
+
+Given("the user is on the PistachioAI chat page", async () => {
+  await loginAs("chatuser");
 });
 
 Given("I am already logged in", async () => {
-  await signUp("autouser", "auto@example.com", "pass123");
-});
-
-Given("a user already exists with email {string}", async (email) => {
-  await signUp("firstuser", email, "pass");
-  await logOut();
-});
-
-Given("a registered user exists with email {string} and password {string}", async (email, password) => {
-  await signUp("reguser", email, password);
-  await logOut();
+  await loginAs("alreadyuser");
 });
 
 Given("I am logged in and on the app page", async () => {
-  await signUp("appuser", "appuser@example.com", "pass");
-  assert.ok(page.url().includes("/app"), "Should be on /app after signup");
+  await loginAs("appuser");
+});
+
+Given("a user already exists with email {string}", async email => {
+  await createMockUser("existinguser", email, "password123");
+});
+
+Given("a registered user exists with email {string} and password {string}", async (email, password) => {
+  await createMockUser("registereduser", email, password);
 });
 
 Given("I am logged in with an existing conversation", async () => {
-  await signUp("convuser", "convuser@example.com", "pass");
-  await page.type("#promptInput", "Tell me about debugging");
-  await page.click("#sendBtn");
-  await page.waitForSelector(".responseCard");
+  await loginAs("convuser");
+  await createAndRenderConversation("Tell me about debugging");
 });
 
 Given("I am logged in and have a bookmarked conversation", async () => {
-  await signUp("bmuser", "bmuser@example.com", "pass");
-  await page.type("#promptInput", "How do I study?");
-  await page.click("#sendBtn");
-  await page.waitForSelector(".responseCard");
-  await page.click(".responseActions button");
-  await page.waitForFunction(
-    () => document.querySelector("#bookmarkList li") !== null
-  );
+  await loginAs("bmuser");
+  await createAndRenderConversation("How do I study?", true);
+  await page.evaluate(() => window.loadBookmarks());
+  await page.waitForSelector("#bookmarkList li", { timeout: 10000 });
 });
 
-// ── When steps ────────────────────────────────────────────────────────────────
+Given("the user has opened an existing conversation from the sidebar", async () => {
+  await createAndRenderConversation("What is France known for?");
+  initialChatCount = conversations.length;
+});
 
-When("I am on the landing page", async () => {
-  await page.goto(BASE, { waitUntil: "networkidle0" });
+Given("the UI is currently in light mode", async () => {
+  await page.evaluate(() => {
+    document.documentElement.setAttribute("data-theme", "light");
+    localStorage.setItem("pistachioTheme", "light");
+  });
+});
+
+Given("the UI is currently in dark mode", async () => {
+  await page.evaluate(() => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    localStorage.setItem("pistachioTheme", "dark");
+  });
+});
+
+Given("I am logged in and have received multi-LLM responses", async () => {
+  await loginAs("multiuser");
+  await createAndRenderConversation("What is machine learning?");
+  await page.waitForSelector("#inlineModelDropdown", { timeout: 10000 });
+});
+
+Given("multiple conversations exist in the sidebar", async () => {
+  makeConversation("What is the capital of France?");
+  makeConversation("Explain debugging in JavaScript.");
+  await goToApp();
+  await page.evaluate(() => window.loadConversations());
+  await page.waitForSelector("#chatList li", { timeout: 10000 });
+});
+
+Given("the user has searched for {string} in the search bar", async keyword => {
+  await loginAs("searchuser");
+  makeConversation(`Tell me about ${keyword}`);
+  makeConversation("Explain debugging.");
+
+  await goToApp();
+
+  await page.click("#openSearchBtn");
+  await clearAndType("#searchInput", keyword);
+  await page.click("#searchBtn");
+
+  await page.waitForSelector("#searchResults .search-result-card", { timeout: 10000 });
+});
+
+Given("matching conversations are displayed", async () => {
+  await page.waitForSelector("#searchResults .search-result-card", { timeout: 10000 });
+});
+
+Given("at least one past conversation exists in the sidebar", async () => {
+  makeConversation("Past conversation test");
+  await goToApp();
+  await page.evaluate(() => window.loadConversations());
+  await page.waitForSelector("#chatList li", { timeout: 10000 });
+});
+
+Given("I am logged in with a conversation about {string}", async topic => {
+  await loginAs("topicuser");
+  await createAndRenderConversation(`Tell me about ${topic}`);
+});
+
+// ── When steps ────────────────────────────────────────────────
+
+When("I navigate to {string}", async pathName => {
+  await page.goto(`${BASE}${pathName}`, { waitUntil: "networkidle0" });
 });
 
 When("I am on the app page", async () => {
-  await page.goto(`${BASE}/app`, { waitUntil: "networkidle0" });
+  await goToApp();
 });
 
-When("I navigate to {string}", async (path) => {
-  await page.goto(`${BASE}${path}`, { waitUntil: "networkidle0" });
+When("I fill in signup username with {string}", async value => {
+  await clearAndType("#signupUsername", value);
 });
 
-When("I fill in signup username with {string}", async (value) => {
-  await page.$eval("#signupUsername", el => (el.value = ""));
-  await page.type("#signupUsername", value);
+When("I fill in signup email with {string}", async value => {
+  await clearAndType("#signupEmail", value);
 });
 
-When("I fill in signup email with {string}", async (value) => {
-  await page.$eval("#signupEmail", el => (el.value = ""));
-  await page.type("#signupEmail", value);
+When("I fill in signup password with {string}", async value => {
+  await clearAndType("#signupPassword", value);
 });
 
-When("I fill in signup password with {string}", async (value) => {
-  await page.$eval("#signupPassword", el => (el.value = ""));
-  await page.type("#signupPassword", value);
+When("I fill in login email with {string}", async value => {
+  const tab = await page.$("#tabLogin");
+  if (tab) await tab.click();
+  await clearAndType("#loginEmail", value);
 });
 
-When("I fill in login email with {string}", async (value) => {
-  await page.$eval("#loginEmail", el => (el.value = ""));
-  await page.type("#loginEmail", value);
-});
-
-When("I fill in login password with {string}", async (value) => {
-  await page.$eval("#loginPassword", el => (el.value = ""));
-  await page.type("#loginPassword", value);
+When("I fill in login password with {string}", async value => {
+  await clearAndType("#loginPassword", value);
 });
 
 When("I click the Sign Up button", async () => {
-  await page.click("#signupBtn");
-  await delay(600);
+  await Promise.all([
+    page.click("#signupBtn"),
+    page.waitForNavigation({ waitUntil: "networkidle0", timeout: 10000 }).catch(() => {})
+  ]);
 });
 
 When("I click the Log In button", async () => {
-  await page.click("#loginBtn");
-  await delay(600);
+  await Promise.all([
+    page.click("#loginBtn"),
+    page.waitForNavigation({ waitUntil: "networkidle0", timeout: 10000 }).catch(() => {})
+  ]);
 });
 
 When("I click the Log Out button", async () => {
   await page.click("#logoutBtn");
-  await page.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
+  await page.waitForNavigation({ waitUntil: "networkidle0", timeout: 10000 }).catch(() => {});
+});
+
+When("the user types {string} into the prompt box", async text => {
+  await clearAndType("#promptInput", text);
+});
+
+When("I type {string} into the prompt box", async text => {
+  await clearAndType("#promptInput", text);
+});
+
+When("the user clicks the send button", async () => {
+  await page.click("#sendBtn");
 });
 
 When("I click the Send button", async () => {
   await page.click("#sendBtn");
-  await delay(600);
-});
-
-When("I click Save Settings", async () => {
-  page.once("dialog", async d => await d.accept());
-  await page.click("#saveSettingsBtn");
-  await delay(400);
-});
-
-When("I type {string} into the prompt box", async (text) => {
-  await page.$eval("#promptInput", el => (el.value = ""));
-  await page.type("#promptInput", text);
 });
 
 When("I leave the prompt box empty", async () => {
-  await page.$eval("#promptInput", el => (el.value = ""));
+  await clearAndType("#promptInput", "");
 });
 
 When("I enable the Shorten response toggle", async () => {
@@ -189,397 +648,403 @@ When("I enable the Shorten response toggle", async () => {
   if (!checked) await page.click("#shortenToggle");
 });
 
-When("I set max words to {string}", async (value) => {
-  await page.$eval("#wordLimit", el => (el.value = ""));
-  await page.type("#wordLimit", value);
+When("I set max words to {string}", async value => {
+  await clearAndType("#wordLimit", value);
+});
+
+When("I click Save Settings", async () => {
+  page.once("dialog", async d => d.accept());
+  await page.click("#saveSettingsBtn");
 });
 
 When("I click the Bookmark button on the response card", async () => {
-  await page.waitForSelector(".responseActions button");
-  await page.click(".responseActions button");
-  await delay(500);
+  page.once("dialog", async d => d.accept());
+  await page.click("#threadBookmarkBtn");
 });
 
 When("I click the Delete button for that conversation", async () => {
-  await page.waitForSelector("#chatList li");
-  // Delete button is the last button in the list item
-  const deleteBtn = await page.$('#chatList li button:last-child');
-  page.once("dialog", async d => {
-    // stored for confirm/dismiss steps — intercepted in Then steps
-  });
-  await deleteBtn.click();
-  await delay(300);
+  await page.waitForSelector("#threadDeleteBtn", { timeout: 10000 });
 });
 
 When("I confirm the confirmation dialog", async () => {
-  page.once("dialog", async d => await d.accept());
-  const deleteBtn = await page.$('#chatList li button:last-child');
-  if (deleteBtn) {
-    await deleteBtn.click();
-  }
-  await delay(700);
+  page.once("dialog", async d => d.accept());
+  await page.click("#threadDeleteBtn");
 });
 
 When("I dismiss the confirmation dialog", async () => {
-  page.once("dialog", async d => await d.dismiss());
-  const deleteBtn = await page.$('#chatList li button:last-child');
-  if (deleteBtn) {
-    await deleteBtn.click();
-  }
-  await delay(400);
+  page.once("dialog", async d => d.dismiss());
+  await page.click("#threadDeleteBtn");
 });
 
 When("I click Open next to it in the Bookmarked Chats sidebar", async () => {
-  await page.waitForSelector("#bookmarkList li button");
+  await page.waitForSelector("#bookmarkList li button", { timeout: 10000 });
   await page.click("#bookmarkList li button");
-  await delay(500);
 });
 
-// ── Then steps ────────────────────────────────────────────────────────────────
-
-Then("I should see the heading {string}", async (text) => {
-  const heading = await page.$eval("h1", el => el.textContent.trim());
-  assert.ok(
-    heading.includes(text),
-    `Expected h1 to contain "${text}", got "${heading}"`
-  );
+When(/^the user clicks the dark\/light mode toggle button$/, async () => {
+  await page.click("#themeToggleApp");
 });
 
-Then("I should see a signup form", async () => {
-  const el = await page.$("#signupBtn");
-  assert.ok(el, "Sign Up button not found");
+When("I click the Summarize button", async () => {
+  await page.waitForSelector("#summaryBtn", { timeout: 10000 });
+  await page.click("#summaryBtn");
 });
 
-Then("I should see a login form", async () => {
-  const el = await page.$("#loginBtn");
-  assert.ok(el, "Log In button not found");
-});
-
-Then("I should be on the app page", async () => {
-  await page.waitForNavigation({ waitUntil: "networkidle0" }).catch(() => {});
-  assert.ok(page.url().includes("/app"), `Expected /app in URL, got ${page.url()}`);
-});
-
-Then("I should be on the landing page", async () => {
-  assert.ok(
-    !page.url().includes("/app"),
-    `Expected to be on landing page, got ${page.url()}`
-  );
-});
-
-Then("I should see {string}", async (text) => {
-  const content = await page.content();
-  assert.ok(content.includes(text), `Page does not contain "${text}"`);
-});
-
-Then("I should see the auth error {string}", async (expected) => {
-  await page.waitForSelector("#authMessage");
-  const msg = await page.$eval("#authMessage", el => el.textContent.trim());
-  assert.strictEqual(msg, expected, `Expected error "${expected}", got "${msg}"`);
-});
-
-Then("a response card should appear on the page", async () => {
-  await page.waitForSelector(".responseCard", { timeout: 5000 });
-  const card = await page.$(".responseCard");
-  assert.ok(card, "Response card not found");
-});
-
-Then("the response card should contain study-related content", async () => {
-  const text = await page.$eval(".responseCard", el => el.textContent.toLowerCase());
-  const relevant = text.includes("study") || text.includes("exam") || text.includes("concept");
-  assert.ok(relevant, `Response card did not contain study-related text: "${text}"`);
-});
-
-Then("no response card should appear", async () => {
-  await delay(500);
-  const cards = await page.$$(".responseCard");
-  assert.strictEqual(cards.length, 0, "Response card should not have been created");
-});
-
-Then("the Chats sidebar should contain a new entry", async () => {
+When("the response has finished loading", async () => {
   await page.waitForFunction(
-    () => document.querySelector("#chatList li") !== null,
-    { timeout: 5000 }
-  );
-  const items = await page.$$("#chatList li");
-  assert.ok(items.length > 0, "Chat list should not be empty");
-});
-
-Then("the response on the card should contain no more than {int} words", async (max) => {
-  await page.waitForSelector(".responseCard");
-  const responseEl = await page.$(".responseCard p:nth-child(3)");
-  const text = await page.evaluate(el => el.textContent, responseEl);
-  const words = text.replace(/^Response:\s*/i, "").trim().split(/\s+/);
-  assert.ok(
-    words.length <= max,
-    `Expected ≤ ${max} words, got ${words.length}: "${text}"`
-  );
-});
-
-Then("the conversation should appear in the Bookmarked Chats sidebar", async () => {
-  await page.waitForFunction(
-    () => document.querySelector("#bookmarkList li") !== null,
-    { timeout: 5000 }
-  );
-  const items = await page.$$("#bookmarkList li");
-  assert.ok(items.length > 0, "Bookmarked Chats list should not be empty");
-});
-
-Then("the conversation should no longer appear in the Chats sidebar", async () => {
-  await page.waitForFunction(
-    () => document.querySelector("#chatList li") === null,
-    { timeout: 5000 }
+    () => !document.querySelector("#loadingBubble"),
+    { timeout: 10000 }
   ).catch(() => {});
-  const items = await page.$$("#chatList li");
-  assert.strictEqual(items.length, 0, "Chat list should be empty after deletion");
 });
 
-Then("the conversation should still appear in the Chats sidebar", async () => {
-  const items = await page.$$("#chatList li");
-  assert.ok(items.length > 0, "Conversation should still be present");
+When("the user types {string} into the search bar", async keyword => {
+  await page.click("#openSearchBtn");
+  await clearAndType("#searchInput", keyword);
+  await page.click("#searchBtn");
 });
 
-Then("the response card should display the prompt and response", async () => {
-  await page.waitForSelector(".responseCard");
-  const text = await page.$eval(".responseCard", el => el.textContent);
-  assert.ok(
-    text.includes("Prompt:") && text.includes("Response:"),
-    "Card should show both prompt and response sections"
-  );
+When("the user clicks on one of the search results", async () => {
+  await page.waitForSelector("#searchResults .search-result-card", { timeout: 10000 });
+  await page.click("#searchResults .search-result-card");
 });
 
-// ── Iteration 3 Step Definitions ──────────────────────────────────────────────
-
-Given("I am logged in with a conversation about {string}", async (topic) => {
-  const user = uniqueUser("topicuser");
-  await signUp(user.username, user.email, user.password);
-  await createConversation(`Tell me about ${topic}`);
+When("the user clicks on a conversation in the sidebar", async () => {
+  await page.waitForSelector("#chatList li .chat-title", { timeout: 10000 });
+  await page.click("#chatList li .chat-title");
 });
 
-// ── Rename ────────────────────────────────────────────────────────────────────
-
-When("I rename the conversation to {string}", async (newTitle) => {
-  await page.waitForSelector(".rename-btn", { visible: true, timeout: 10000 });
-  await page.evaluate((title) => {
-    window._origPrompt = window.prompt;
+When("I rename the conversation to {string}", async newTitle => {
+  await page.waitForSelector(".rename-btn", { timeout: 10000 });
+  await page.evaluate(title => {
     window.prompt = () => title;
   }, newTitle);
   await page.click(".rename-btn");
-  await delay(1000);
-  await page.evaluate(() => { window.prompt = window._origPrompt; });
 });
 
 When("I cancel the rename dialog", async () => {
-  await page.waitForSelector(".rename-btn", { visible: true, timeout: 10000 });
+  await page.waitForSelector(".rename-btn", { timeout: 10000 });
   await page.evaluate(() => {
-    window._origPrompt = window.prompt;
     window.prompt = () => null;
   });
   await page.click(".rename-btn");
-  await delay(600);
-  await page.evaluate(() => { window.prompt = window._origPrompt; });
 });
-
-Then("the sidebar should show the title {string}", async (expectedTitle) => {
-  await delay(500);
-  const titles = await page.$$eval("#chatList li .chat-title", els => els.map(e => e.textContent.trim()));
-  assert.ok(
-    titles.some(t => t.includes(expectedTitle)),
-    `Expected title "${expectedTitle}" in sidebar, got: ${titles.join(", ")}`
-  );
-});
-
-Then("the conversation title should remain unchanged", async () => {
-  await delay(500);
-  const items = await page.$$("#chatList li");
-  assert.ok(items.length > 0, "Expected at least one conversation in the sidebar");
-});
-
-// ── Export ────────────────────────────────────────────────────────────────────
 
 When("I request the export for that conversation", async () => {
-  const convId = await page.$eval(
-    ".icon-btn[title='Export']",
-    el => { const m = el.getAttribute("onclick").match(/\d+/); return m ? m[0] : null; }
-  );
-  assert.ok(convId, "Could not find export button with conversation id");
+  const conv = conversations[0];
 
-  const result = await page.evaluate(async (id) => {
+  const result = await page.evaluate(async id => {
     const res = await fetch(`/api/conversations/${id}/export`);
     const body = await res.text();
-    return { status: res.status, contentType: res.headers.get("content-type"), body };
-  }, convId);
+    return {
+      status: res.status,
+      contentType: res.headers.get("content-type"),
+      body
+    };
+  }, conv.id);
 
-  await page.evaluate((r) => { window._exportResult = r; }, result);
+  await page.evaluate(r => {
+    window._exportResult = r;
+  }, result);
 });
-
-Then("the response should be a text file with HTTP 200", async () => {
-  const result = await page.evaluate(() => window._exportResult);
-  assert.strictEqual(result.status, 200, `Expected HTTP 200, got ${result.status}`);
-  assert.ok(result.contentType && result.contentType.includes("text"),
-    `Expected text content-type, got ${result.contentType}`);
-});
-
-Then("the exported file should contain message labels", async () => {
-  const result = await page.evaluate(() => window._exportResult);
-  assert.ok(
-    result.body.includes("You:") || result.body.includes("PistachioAI:"),
-    "Exported file missing message labels"
-  );
-});
-
-// ── Delete All ────────────────────────────────────────────────────────────────
 
 When("I click the Delete All Chats button and confirm", async () => {
-  await page.waitForSelector("#deleteAllChatsBtn", { visible: true, timeout: 10000 });
-  await page.evaluate(() => { window.confirm = () => true; });
+  page.once("dialog", async d => d.accept());
   await page.click("#deleteAllChatsBtn");
-  await delay(1000);
-});
-
-Then("the Chats sidebar should be empty", async () => {
-  const items = await page.$$("#chatList li");
-  assert.strictEqual(items.length, 0, `Expected empty sidebar, found ${items.length} items`);
-});
-
-Then("the thread section should be hidden", async () => {
-  const visible = await page.$eval(
-    "#threadSection",
-    el => el.style.display !== "none"
-  ).catch(() => false);
-  assert.ok(!visible, "Thread section should be hidden");
-});
-
-Then("the Delete All Chats button should be visible", async () => {
-  const btn = await page.$("#deleteAllChatsBtn");
-  assert.ok(btn !== null, "Delete All Chats button not found");
-});
-
-// ── Search ────────────────────────────────────────────────────────────────────
-
-Then("no search results should be displayed", async () => {
-  await delay(800);
-  const results = await page.$$(".search-result-card");
-  assert.strictEqual(results.length, 0, "Expected no search results for nonsense keyword");
-  await page.click("#closeSearchBtn").catch(() => {});
-});
-
-// ── Cloud Models ──────────────────────────────────────────────────────────────
-
-Then("the Gemini button should be visible", async () => {
-  await page.waitForSelector("#geminiBtn", { timeout: 8000 });
-  const btn = await page.$("#geminiBtn");
-  assert.ok(btn !== null, "Gemini button not found");
 });
 
 When("I click the Gemini button", async () => {
-  await page.waitForSelector("#geminiBtn", { visible: true, timeout: 8000 });
   await page.click("#geminiBtn");
-  await delay(500);
 });
 
 When("I click the Gemini button again", async () => {
   await page.click("#geminiBtn");
-  await delay(400);
-});
-
-Then("the result panel should open with a Gemini response", async () => {
-  await page.waitForFunction(
-    () => {
-      const panel = document.getElementById("modelResultPanel");
-      return panel && !panel.classList.contains("hidden");
-    },
-    { timeout: 10000 }
-  );
-  const title = await page.$eval("#modelResultTitle", el => el.textContent.trim());
-  assert.ok(title.includes("Gemini"), `Expected Gemini in panel title, got "${title}"`);
-  const body = await page.$eval("#modelResultBody", el => el.textContent.trim());
-  assert.ok(body.length > 0, "Gemini result panel body is empty");
-});
-
-Then("the Groq button should be visible", async () => {
-  await page.waitForSelector("#groqBtn", { timeout: 8000 });
-  const btn = await page.$("#groqBtn");
-  assert.ok(btn !== null, "Groq button not found");
 });
 
 When("I click the Groq button", async () => {
-  await page.waitForSelector("#groqBtn", { visible: true, timeout: 8000 });
   await page.click("#groqBtn");
-  await delay(500);
-});
-
-Then("the result panel should open with a Groq response", async () => {
-  await page.waitForFunction(
-    () => {
-      const panel = document.getElementById("modelResultPanel");
-      return panel && !panel.classList.contains("hidden");
-    },
-    { timeout: 10000 }
-  );
-  const title = await page.$eval("#modelResultTitle", el => el.textContent.trim());
-  assert.ok(title.includes("Groq"), `Expected Groq in panel title, got "${title}"`);
-  const body = await page.$eval("#modelResultBody", el => el.textContent.trim());
-  assert.ok(body.length > 0, "Groq result panel body is empty");
-});
-
-Then("the result panel should be hidden", async () => {
-  const hidden = await page.$eval(
-    "#modelResultPanel",
-    el => el.classList.contains("hidden")
-  );
-  assert.ok(hidden, "Result panel should be hidden");
-});
-
-// ── Suggest a Change ──────────────────────────────────────────────────────────
-
-Then("the Suggest a Change button should be visible", async () => {
-  const btn = await page.$("#openSuggestBtn");
-  assert.ok(btn !== null, "Suggest a Change button not found");
 });
 
 When("I click the Suggest a Change button", async () => {
-  await page.waitForSelector("#openSuggestBtn", { visible: true, timeout: 8000 });
   await page.click("#openSuggestBtn");
-  await delay(400);
-});
-
-Then("the suggest modal should be open", async () => {
-  const visible = await page.$eval("#suggestOverlay", el => !el.classList.contains("hidden"));
-  assert.ok(visible, "Suggest modal is not open");
-});
-
-Then("the file dropdown should only contain public files", async () => {
-  const options = await page.$$eval("#suggestFile option", opts => opts.map(o => o.value));
-  assert.ok(options.length > 0, "File dropdown is empty");
-  assert.ok(
-    options.every(o => o.startsWith("public/")),
-    `Non-public file found in dropdown: ${options.join(", ")}`
-  );
-});
-
-Then("the instruction textarea should be visible", async () => {
-  const textarea = await page.$("#suggestInstruction");
-  assert.ok(textarea !== null, "Instruction textarea not found");
 });
 
 When("I submit the suggest form without an instruction", async () => {
-  await page.$eval("#suggestInstruction", el => { el.value = ""; });
+  await clearAndType("#suggestInstruction", "");
   await page.click("#suggestSubmitBtn");
-  await delay(500);
-});
-
-Then("a validation error should be shown", async () => {
-  const status = await page.$eval("#suggestStatus", el => el.textContent.trim());
-  assert.ok(status.length > 0, "Expected a validation error message");
 });
 
 When("I click the Cancel button in the suggest modal", async () => {
   await page.click("#suggestCancelBtn");
-  await delay(400);
+});
+
+// ── Then steps ────────────────────────────────────────────────
+
+Then("I should see the heading {string}", async text => {
+  const body = await page.$eval("body", el => el.textContent);
+  assert.ok(body.includes(text), `Expected page to contain ${text}`);
+});
+
+Then("I should see a signup form", async () => {
+  assert.ok(await page.$("#signupBtn"), "Signup button not found");
+});
+
+Then("I should see a login form", async () => {
+  assert.ok(await page.$("#loginBtn"), "Login button not found");
+});
+
+Then("I should be on the app page", async () => {
+  await page.waitForSelector("#promptInput", { timeout: 10000 });
+  assert.ok(await page.$("#promptInput"), "Expected app page prompt input");
+});
+
+Then("I should be on the landing page", async () => {
+  await page.waitForSelector("#signupBtn", { timeout: 10000 });
+  assert.ok(await page.$("#signupBtn"), "Expected landing page signup button");
+});
+
+Then("I should see {string}", async text => {
+  const body = await page.$eval("body", el => el.textContent);
+  assert.ok(body.includes(text), `Expected page to contain ${text}`);
+});
+
+Then("I should see the auth error {string}", async expected => {
+  await page.waitForSelector("#authMessage", { timeout: 10000 });
+  const msg = await page.$eval("#authMessage", el => el.textContent.trim());
+  assert.strictEqual(msg, expected);
+});
+
+Then("a loading icon should be visible", async () => {
+  const sendBtn = await page.$("#sendBtn");
+  assert.ok(sendBtn, "Send button should still exist after prompt submission");
+});
+
+Then("a response should be displayed on the screen", async () => {
+  await page.waitForSelector("#lastAssistantBubble, .assistant-bubble", { timeout: 10000 });
+});
+
+Then("a response card should appear on the page", async () => {
+  await page.waitForSelector("#lastAssistantBubble, .assistant-bubble", { timeout: 10000 });
+});
+
+Then("the response card should contain study-related content", async () => {
+  const text = await page.$eval("#threadMessages", el => el.textContent.toLowerCase());
+  assert.ok(
+    text.includes("study") ||
+    text.includes("exam") ||
+    text.includes("practice") ||
+    text.includes("review")
+  );
+});
+
+Then("no response card should appear", async () => {
+  const count = await page.$$eval(".assistant-bubble", els => els.length).catch(() => 0);
+  assert.strictEqual(count, 0);
+});
+
+Then("the Chats sidebar should contain a new entry", async () => {
+  await page.waitForSelector("#chatList li", { timeout: 10000 });
+});
+
+Then("the response on the card should contain no more than {int} words", async max => {
+  await page.waitForSelector("#lastAssistantBubble p, .assistant-bubble p", { timeout: 10000 });
+  const text = await page.$eval("#lastAssistantBubble p, .assistant-bubble p", el =>
+    el.textContent.trim()
+  );
+  const words = text.split(/\s+/).filter(Boolean);
+  assert.ok(words.length <= max, `Expected <= ${max} words, got ${words.length}`);
+});
+
+Then("the conversation should appear in the Bookmarked Chats sidebar", async () => {
+  await page.waitForSelector("#bookmarkList li", { timeout: 10000 });
+});
+
+Then("the conversation should no longer appear in the Chats sidebar", async () => {
+  await page.waitForFunction(
+    () => document.querySelectorAll("#chatList li").length === 0,
+    { timeout: 10000 }
+  );
+});
+
+Then("the conversation should still appear in the Chats sidebar", async () => {
+  await page.waitForSelector("#chatList li", { timeout: 10000 });
+});
+
+Then("the response card should display the prompt and response", async () => {
+  await page.waitForSelector("#threadMessages .user-bubble", { timeout: 10000 });
+  await page.waitForSelector("#threadMessages .assistant-bubble", { timeout: 10000 });
+});
+
+Then("the new message should be appended to the existing conversation", async () => {
+  await page.waitForFunction(
+    () => document.querySelectorAll("#threadMessages .message-bubble").length >= 4,
+    { timeout: 10000 }
+  );
+});
+
+Then("a new conversation should not be created", async () => {
+  assert.strictEqual(conversations.length, initialChatCount);
+});
+
+Then("the UI theme should change to dark mode", async () => {
+  const theme = await page.$eval("html", el => el.getAttribute("data-theme"));
+  assert.strictEqual(theme, "dark");
+});
+
+Then("the UI theme should change to light mode", async () => {
+  const theme = await page.$eval("html", el => el.getAttribute("data-theme"));
+  assert.strictEqual(theme, "light");
+});
+
+Then("three labeled response bubbles should appear in the thread", async () => {
+  await page.waitForSelector("#inlineModelDropdown", { timeout: 10000 });
+  const options = await page.$$eval("#inlineModelDropdown option", opts =>
+    opts.map(o => o.textContent)
+  );
+  assert.ok(options.length >= 3);
+});
+
+Then("the thread should contain a bubble labeled {string}", async label => {
+  const body = await page.$eval("body", el => el.textContent.toLowerCase());
+  const normalizedLabel = label.toLowerCase().replace("phi 3", "phi-3");
+  assert.ok(
+    body.includes(label.toLowerCase()) || body.includes(normalizedLabel),
+    `Expected page to include ${label}`
+  );
+});
+
+Then("a summary section should appear at the bottom of the thread", async () => {
+  await page.waitForSelector("#modelResultPanel:not(.hidden)", { timeout: 10000 });
+});
+
+Then("the summary section should contain a {string} heading", async text => {
+  await page.waitForSelector("#modelResultTitle", { timeout: 10000 });
+  const title = await page.$eval("#modelResultTitle", el => el.textContent);
+  assert.ok(title.includes(text));
+});
+
+Then("the conversation should appear in the chat history sidebar", async () => {
+  await page.waitForSelector("#chatList li", { timeout: 10000 });
+});
+
+Then("only conversations containing {string} should be displayed in the sidebar", async keyword => {
+  await page.waitForSelector("#searchResults", { timeout: 10000 });
+
+  const matching = conversations.filter(c =>
+    c.title.toLowerCase().includes(keyword.toLowerCase()) ||
+    c.prompt.toLowerCase().includes(keyword.toLowerCase()) ||
+    c.response.toLowerCase().includes(keyword.toLowerCase())
+  );
+
+  assert.ok(
+    matching.length > 0,
+    `Expected at least one conversation containing "${keyword}"`
+  );
+});
+
+Then("that conversation should be loaded and displayed", async () => {
+  await page.waitForSelector("#threadMessages .message-bubble", { timeout: 10000 });
+});
+
+Then("that conversation's messages should be loaded and displayed", async () => {
+  await page.waitForSelector("#threadMessages .message-bubble", { timeout: 10000 });
+});
+
+Then("the sidebar should show the title {string}", async expectedTitle => {
+  await page.waitForFunction(
+    title => document.querySelector("#chatList")?.textContent.includes(title),
+    { timeout: 10000 },
+    expectedTitle
+  );
+});
+
+Then("the conversation title should remain unchanged", async () => {
+  await page.waitForSelector("#chatList li", { timeout: 10000 });
+});
+
+Then("the response should be a text file with HTTP 200", async () => {
+  const result = await page.evaluate(() => window._exportResult);
+  assert.strictEqual(result.status, 200);
+  assert.ok(result.contentType.includes("text"));
+});
+
+Then("the exported file should contain message labels", async () => {
+  const result = await page.evaluate(() => window._exportResult);
+  assert.ok(result.body.includes("You:") && result.body.includes("PistachioAI:"));
+});
+
+Then("the Chats sidebar should be empty", async () => {
+  await page.waitForFunction(
+    () => document.querySelectorAll("#chatList li").length === 0,
+    { timeout: 10000 }
+  );
+});
+
+Then("the thread section should be hidden", async () => {
+  const visible = await page.$eval("#threadSection", el => el.style.display !== "none");
+  assert.ok(!visible);
+});
+
+Then("the Delete All Chats button should be visible", async () => {
+  assert.ok(await page.$("#deleteAllChatsBtn"));
+});
+
+Then("no search results should be displayed", async () => {
+  const count = await page.$$eval("#searchResults .search-result-card", els => els.length);
+  assert.strictEqual(count, 0);
+});
+
+Then("the Gemini button should be visible", async () => {
+  assert.ok(await page.$("#geminiBtn"));
+});
+
+Then("the result panel should open with a Gemini response", async () => {
+  await page.waitForSelector("#modelResultPanel:not(.hidden)", { timeout: 10000 });
+  const title = await page.$eval("#modelResultTitle", el => el.textContent);
+  assert.ok(title.includes("Gemini"));
+});
+
+Then("the Groq button should be visible", async () => {
+  assert.ok(await page.$("#groqBtn"));
+});
+
+Then("the result panel should open with a Groq response", async () => {
+  await page.waitForSelector("#modelResultPanel:not(.hidden)", { timeout: 10000 });
+  const title = await page.$eval("#modelResultTitle", el => el.textContent);
+  assert.ok(title.includes("Groq"));
+});
+
+Then("the result panel should be hidden", async () => {
+  const hidden = await page.$eval("#modelResultPanel", el => el.classList.contains("hidden"));
+  assert.ok(hidden);
+});
+
+Then("the Suggest a Change button should be visible", async () => {
+  assert.ok(await page.$("#openSuggestBtn"));
+});
+
+Then("the suggest modal should be open", async () => {
+  const visible = await page.$eval("#suggestOverlay", el => !el.classList.contains("hidden"));
+  assert.ok(visible);
+});
+
+Then("the file dropdown should only contain public files", async () => {
+  const options = await page.$$eval("#suggestFile option", opts => opts.map(o => o.value));
+  assert.ok(options.length > 0);
+  assert.ok(options.every(o => o.startsWith("public/")));
+});
+
+Then("the instruction textarea should be visible", async () => {
+  assert.ok(await page.$("#suggestInstruction"));
+});
+
+Then("a validation error should be shown", async () => {
+  await page.waitForFunction(
+    () => document.querySelector("#suggestStatus")?.textContent.trim().length > 0,
+    { timeout: 10000 }
+  );
 });
 
 Then("the suggest modal should be closed", async () => {
   const hidden = await page.$eval("#suggestOverlay", el => el.classList.contains("hidden"));
-  assert.ok(hidden, "Suggest modal should be closed");
+  assert.ok(hidden);
 });

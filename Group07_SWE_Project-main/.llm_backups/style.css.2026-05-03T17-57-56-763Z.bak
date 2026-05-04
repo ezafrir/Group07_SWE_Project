@@ -27,7 +27,7 @@
   --bottombar-bg:     #FFFFFF;
   --card-shadow:      0 4px 20px rgba(63, 107, 60, 0.08);
   --input-bg:         #F7F8F4;
-  --active-chat-bg: #FFA500;
+  --active-chat-bg:   #EBF5E6;
   --active-chat-text: #3F6B3C;
   --pill-bg:          #EBF5E6;
   --pill-text:        #3F6B3C;
@@ -527,7 +527,7 @@ body {
   border-radius: 10px;
   width: 38px;
   height: 38px;
-  font-size: 20px;
+  font-size: 17px;
   cursor: pointer;
   display: flex;
   align-items: center;

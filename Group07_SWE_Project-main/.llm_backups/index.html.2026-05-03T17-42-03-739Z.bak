@@ -29,9 +29,7 @@
       </div>
 
       <div class="sidebar-new-chat">
-
-<button id="newChatBtn" class="new-chat-btn">✦ New Chat</button>
-
+        <button id="newChatBtn" class="new-chat-btn">＋ New Chat</button>
       </div>
 
       <div class="sidebar-section">

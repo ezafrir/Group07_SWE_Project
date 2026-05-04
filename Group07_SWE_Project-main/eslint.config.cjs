@@ -3,7 +3,13 @@ const globals = require("globals");
 
 module.exports = [
   {
-    ignores: ["node_modules/**", "reports/**", "eslint.config.cjs"]
+    ignores: [
+      "node_modules/**",
+      "reports/**",
+      "coverage/**",
+      "dist/**",
+      "eslint.config.cjs"
+    ]
   },
   js.configs.recommended,
   {
@@ -17,6 +23,10 @@ module.exports = [
         ...globals.jasmine,
         fetch: "readonly"
       }
+    },
+    rules: {
+      "no-unused-vars": "warn",
+      "no-undef": "error"
     }
   }
 ];

@@ -36,8 +36,7 @@ ollama pull phi3
 ollama pull tinyllama
 
 # Self-modification feature (see section below)
-ollama pull deepseek-coder:1.3b     # low RAM machines (8 GB)
-ollama pull deepseek-coder:6.7b     # recommended (16 GB+)
+ollama pull deepseek-coder:6.7b     
 ```
 
 ### 3. Start Ollama
